@@ -1,0 +1,55 @@
+{
+  "experiment": {
+    "name": "default_experiment",
+    "output_dir": "./output",
+    "save_format": "png"
+  },
+  "cameras": [
+    {
+      "id": "cam_0",
+      "name": "Front Camera",
+      "device_index": 0,
+      "resolution": [1920, 1080],
+      "fps": 30,
+      "enabled": true
+    },
+    {
+      "id": "cam_1",
+      "name": "Side Camera",
+      "device_index": 1,
+      "resolution": [1920, 1080],
+      "fps": 30,
+      "enabled": true
+    }
+  ],
+  "phases": [
+    {
+      "id": "calibration",
+      "name": "Calibration",
+      "duration_seconds": 10,
+      "capture_interval_ms": 100,
+      "instructions": "Stand in T-pose facing the front camera"
+    },
+    {
+      "id": "warmup",
+      "name": "Warm Up",
+      "duration_seconds": 30,
+      "capture_interval_ms": 33,
+      "instructions": "Move freely to warm up"
+    },
+    {
+      "id": "capture",
+      "name": "Main Capture",
+      "duration_seconds": 60,
+      "capture_interval_ms": 33,
+      "instructions": "Perform the target movements"
+    },
+    {
+      "id": "review",
+      "name": "Review",
+      "duration_seconds": 0,
+      "capture_interval_ms": null,
+      "instructions": "Review captured data"
+    }
+  ]
+}
