@@ -8,7 +8,9 @@
     {
       "id": "cam_0",
       "name": "Front Camera",
-      "device_index": 0,
+      "ip_address": "192.168.1.101",
+      "port": 554,
+      "stream_path": "stream1",
       "resolution": [1920, 1080],
       "fps": 30,
       "enabled": true
@@ -16,40 +18,74 @@
     {
       "id": "cam_1",
       "name": "Side Camera",
-      "device_index": 1,
+      "ip_address": "192.168.1.102",
+      "port": 554,
+      "stream_path": "stream1",
       "resolution": [1920, 1080],
       "fps": 30,
       "enabled": true
     }
   ],
+  "gopros": [
+    {
+      "id": "gopro_hero7_1",
+      "name": "GoPro Hero 7 Silver #1",
+      "model": "hero7_silver",
+      "wifi_interface": "en1",
+      "ip_address": "10.5.5.9",
+      "enabled": true
+    },
+    {
+      "id": "gopro_hero7_2",
+      "name": "GoPro Hero 7 Silver #2",
+      "model": "hero7_silver",
+      "wifi_interface": "en2",
+      "ip_address": "10.5.5.9",
+      "enabled": true
+    },
+    {
+      "id": "gopro_hero5_1",
+      "name": "GoPro Hero 5 Session #1",
+      "model": "hero5_session",
+      "wifi_interface": "en3",
+      "ip_address": "10.5.5.9",
+      "enabled": true
+    },
+    {
+      "id": "gopro_hero5_2",
+      "name": "GoPro Hero 5 Session #2",
+      "model": "hero5_session",
+      "wifi_interface": "en4",
+      "ip_address": "10.5.5.9",
+      "enabled": true
+    }
+  ],
+  "heart_rate": {
+    "enabled": true,
+    "device_address": null,
+    "ecg_enabled": false
+  },
   "phases": [
     {
       "id": "calibration",
       "name": "Calibration",
       "duration_seconds": 10,
       "capture_interval_ms": 100,
-      "instructions": "Stand in T-pose facing the front camera"
+      "instructions": "Stand in T-pose facing the front camera. GoPro cameras will connect during this phase."
     },
     {
-      "id": "warmup",
-      "name": "Warm Up",
-      "duration_seconds": 30,
-      "capture_interval_ms": 33,
-      "instructions": "Move freely to warm up"
-    },
-    {
-      "id": "capture",
-      "name": "Main Capture",
+      "id": "recording",
+      "name": "Recording",
       "duration_seconds": 60,
       "capture_interval_ms": 33,
-      "instructions": "Perform the target movements"
+      "instructions": "Perform the target movements. All GoPro cameras are recording."
     },
     {
-      "id": "review",
-      "name": "Review",
+      "id": "post_recording",
+      "name": "Post Recording",
       "duration_seconds": 0,
       "capture_interval_ms": null,
-      "instructions": "Review captured data"
+      "instructions": "Review captured data. Press Ctrl+C when finished."
     }
   ]
 }
