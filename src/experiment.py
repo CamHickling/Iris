@@ -4,6 +4,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
+import cv2
+
 from .camera import CameraManager
 from .gopro import GoProManager
 from .heart_rate import PolarH10
@@ -35,6 +37,7 @@ class Experiment:
         self._session_timestamp = timestamp_string()
         self._keepalive_interval = 2.5  # seconds between GoPro keep-alive signals
         self._last_keepalive = 0.0
+        self._frame_dir = self.output_dir / "frames"
 
     def _load_phases(self, phase_configs: list[dict]) -> list[Phase]:
         phases = []
@@ -48,6 +51,14 @@ class Experiment:
             )
             phases.append(Phase(config))
         return phases
+
+    def _save_frames(self, frames: dict, phase: Phase):
+        """Save captured frames to the output directory, organized by phase."""
+        phase_dir = self._frame_dir / phase.config.id
+        phase_dir.mkdir(parents=True, exist_ok=True)
+        for cam_id, frame in frames.items():
+            filename = f"{cam_id}_{phase.frame_count:06d}.jpg"
+            cv2.imwrite(str(phase_dir / filename), frame)
 
     @property
     def current_phase(self) -> Optional[Phase]:
@@ -134,7 +145,7 @@ class Experiment:
             if phase.should_capture and phase.status == PhaseStatus.ACTIVE:
                 frames = self.camera_manager.capture_all()
                 phase.frame_count += 1
-                # TODO: Save frames
+                self._save_frames(frames, phase)
 
             # Send GoPro keep-alive
             now = time.time()
@@ -162,7 +173,7 @@ class Experiment:
             if phase.should_capture and phase.status == PhaseStatus.ACTIVE:
                 frames = self.camera_manager.capture_all()
                 phase.frame_count += 1
-                # TODO: Save frames
+                self._save_frames(frames, phase)
 
             # Send GoPro keep-alive
             now = time.time()
@@ -236,6 +247,7 @@ class Experiment:
                         if phase.should_capture and phase.status == PhaseStatus.ACTIVE:
                             frames = self.camera_manager.capture_all()
                             phase.frame_count += 1
+                            self._save_frames(frames, phase)
                         if phase_done:
                             break
 

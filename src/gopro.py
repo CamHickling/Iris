@@ -30,6 +30,11 @@ class GoProCam:
         self._camera: Optional[GoProCamera.GoPro] = None
         self._connected = False
 
+    @property
+    def is_connected(self) -> bool:
+        """Whether the camera is currently connected."""
+        return self._connected
+
     def connect(self) -> bool:
         """Connect to the GoPro camera via its WiFi network."""
         print(f"Connecting to GoPro: {self.config.name} ({self.config.model}) "
@@ -212,9 +217,14 @@ class GoProManager:
         print("All GoPro cameras stopped")
 
     def keep_alive_all(self):
-        """Send keep-alive to all cameras."""
+        """Send keep-alive to all cameras in parallel."""
+        threads = []
         for cam in self.cameras.values():
-            cam.keep_alive()
+            t = threading.Thread(target=cam.keep_alive)
+            threads.append(t)
+            t.start()
+        for t in threads:
+            t.join(timeout=5.0)
 
     def disconnect_all(self):
         """Disconnect from all GoPro cameras."""
@@ -229,7 +239,7 @@ class GoProManager:
             status[cam_id] = {
                 "name": cam.config.name,
                 "model": cam.config.model,
-                "connected": cam._connected,
+                "connected": cam.is_connected,
                 "recording": cam.is_recording(),
                 "battery": cam.get_battery(),
             }
