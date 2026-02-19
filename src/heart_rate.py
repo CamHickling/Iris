@@ -60,6 +60,7 @@ class PolarH10:
         self._device = None
         self._hr_samples: list[HeartRateSample] = []
         self._ecg_samples: list[ECGSample] = []
+        self._samples_lock = threading.Lock()
         self._current_phase: str = "unknown"
         self._recording = False
         self._battery_level: Optional[int] = None
@@ -137,7 +138,8 @@ class PolarH10:
             sensor_contact=parsed["sensor_contact"],
             phase=self._current_phase,
         )
-        self._hr_samples.append(sample)
+        with self._samples_lock:
+            self._hr_samples.append(sample)
 
     def _ecg_callback(self, sender, data: bytearray):
         """Callback for PMD ECG data notifications."""
@@ -150,7 +152,8 @@ class PolarH10:
                 values_uv=parsed["samples_uv"],
                 phase=self._current_phase,
             )
-            self._ecg_samples.append(sample)
+            with self._samples_lock:
+                self._ecg_samples.append(sample)
 
     async def _find_device(self):
         """Scan for Polar H10."""
@@ -286,43 +289,50 @@ class PolarH10:
 
     def get_samples(self, phase: Optional[str] = None) -> list[HeartRateSample]:
         """Get HR samples, optionally filtered by phase."""
-        if phase:
-            return [s for s in self._hr_samples if s.phase == phase]
-        return list(self._hr_samples)
+        with self._samples_lock:
+            if phase:
+                return [s for s in self._hr_samples if s.phase == phase]
+            return list(self._hr_samples)
 
     def save_to_csv(self, filepath: Path):
         """Save HR data (BPM + RR intervals) to CSV."""
         filepath.parent.mkdir(parents=True, exist_ok=True)
+        with self._samples_lock:
+            samples = list(self._hr_samples)
         with open(filepath, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["timestamp", "bpm", "rr_intervals_ms", "sensor_contact", "phase"])
-            for s in self._hr_samples:
+            for s in samples:
                 rr_str = ";".join(str(r) for r in s.rr_intervals_ms) if s.rr_intervals_ms else ""
                 writer.writerow([s.timestamp, s.bpm, rr_str, s.sensor_contact, s.phase])
-        print(f"Heart rate data saved to {filepath} ({len(self._hr_samples)} samples)")
+        print(f"Heart rate data saved to {filepath} ({len(samples)} samples)")
 
     def save_ecg_to_csv(self, filepath: Path):
         """Save ECG data to CSV (one row per notification batch)."""
-        if not self._ecg_samples:
+        with self._samples_lock:
+            samples = list(self._ecg_samples)
+        if not samples:
             return
         filepath.parent.mkdir(parents=True, exist_ok=True)
         with open(filepath, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(["timestamp", "phase", "ecg_values_uv"])
-            for s in self._ecg_samples:
+            for s in samples:
                 values_str = ";".join(str(v) for v in s.values_uv)
                 writer.writerow([s.timestamp, s.phase, values_str])
-        total_samples = sum(len(s.values_uv) for s in self._ecg_samples)
-        print(f"ECG data saved to {filepath} ({total_samples} samples across {len(self._ecg_samples)} packets)")
+        total_samples = sum(len(s.values_uv) for s in samples)
+        print(f"ECG data saved to {filepath} ({total_samples} samples across {len(samples)} packets)")
 
     def get_summary(self) -> dict:
         """Get a summary of heart rate data by phase."""
+        with self._samples_lock:
+            samples = list(self._hr_samples)
         summary = {}
-        phases = set(s.phase for s in self._hr_samples)
+        phases = set(s.phase for s in samples)
         for phase in phases:
-            bpms = [s.bpm for s in self._hr_samples if s.phase == phase]
+            bpms = [s.bpm for s in samples if s.phase == phase]
             all_rr = []
-            for s in self._hr_samples:
+            for s in samples:
                 if s.phase == phase:
                     all_rr.extend(s.rr_intervals_ms)
             phase_stats = {
