@@ -150,32 +150,21 @@ class TestPhase:
 # ============================================================
 
 class TestCameraConfig:
-    def test_rtsp_url_without_credentials(self):
+    def test_device_index_stored(self):
         from src.camera import CameraConfig
         cfg = CameraConfig(
-            id="cam1", name="Cam 1", ip_address="192.168.1.10",
-            port=554, stream_path="live", resolution=(1920, 1080),
-            fps=30, enabled=True,
+            id="cam1", name="Cam 1", device_index=2,
+            resolution=(1920, 1080), fps=30, enabled=True,
         )
-        assert cfg.rtsp_url == "rtsp://192.168.1.10:554/live"
-
-    def test_rtsp_url_with_credentials(self):
-        from src.camera import CameraConfig
-        cfg = CameraConfig(
-            id="cam1", name="Cam 1", ip_address="192.168.1.10",
-            port=554, stream_path="live", resolution=(1920, 1080),
-            fps=30, enabled=True, username="admin", password="pass123",
-        )
-        assert cfg.rtsp_url == "rtsp://admin:pass123@192.168.1.10:554/live"
+        assert cfg.device_index == 2
 
 
 class TestCamera:
     def _make_camera(self):
         from src.camera import Camera, CameraConfig
         cfg = CameraConfig(
-            id="cam1", name="Cam 1", ip_address="192.168.1.10",
-            port=554, stream_path="live", resolution=(1920, 1080),
-            fps=30, enabled=True,
+            id="cam1", name="Cam 1", device_index=0,
+            resolution=(1920, 1080), fps=30, enabled=True,
         )
         return Camera(cfg)
 
@@ -187,6 +176,7 @@ class TestCamera:
 
         camera = self._make_camera()
         assert camera.open() is True
+        mock_cv2.VideoCapture.assert_called_with(0)
         assert camera.is_open is True
 
         camera.close()
@@ -241,10 +231,10 @@ class TestCameraManager:
 
         from src.camera import CameraManager
         configs = [
-            {"id": "c1", "name": "Cam1", "ip_address": "1.1.1.1", "port": 554,
-             "stream_path": "s", "resolution": [1920, 1080], "fps": 30, "enabled": True},
-            {"id": "c2", "name": "Cam2", "ip_address": "1.1.1.2", "port": 554,
-             "stream_path": "s", "resolution": [1920, 1080], "fps": 30, "enabled": True},
+            {"id": "c1", "name": "Cam1", "device_index": 0,
+             "resolution": [1920, 1080], "fps": 30, "enabled": True},
+            {"id": "c2", "name": "Cam2", "device_index": 1,
+             "resolution": [1920, 1080], "fps": 30, "enabled": True},
         ]
         mgr = CameraManager(configs)
         assert mgr.open_all() is True
@@ -260,8 +250,8 @@ class TestCameraManager:
 
         from src.camera import CameraManager
         configs = [
-            {"id": "c1", "name": "Cam1", "ip_address": "1.1.1.1", "port": 554,
-             "stream_path": "s", "resolution": [640, 480], "fps": 30, "enabled": True},
+            {"id": "c1", "name": "Cam1", "device_index": 0,
+             "resolution": [640, 480], "fps": 30, "enabled": True},
         ]
         mgr = CameraManager(configs)
         mgr.open_all()

@@ -1,4 +1,4 @@
-"""Camera interface for IP cameras connected via network switch."""
+"""Camera interface for USB webcams connected via USB."""
 
 from dataclasses import dataclass
 from typing import Optional
@@ -11,21 +11,10 @@ import numpy as np
 class CameraConfig:
     id: str
     name: str
-    ip_address: str
-    port: int
-    stream_path: str
+    device_index: int
     resolution: tuple[int, int]
     fps: int
     enabled: bool
-    username: Optional[str] = None
-    password: Optional[str] = None
-
-    @property
-    def rtsp_url(self) -> str:
-        """Build RTSP URL for the camera."""
-        if self.username and self.password:
-            return f"rtsp://{self.username}:{self.password}@{self.ip_address}:{self.port}/{self.stream_path}"
-        return f"rtsp://{self.ip_address}:{self.port}/{self.stream_path}"
 
 
 class Camera:
@@ -34,14 +23,13 @@ class Camera:
         self._capture: Optional[cv2.VideoCapture] = None
 
     def open(self) -> bool:
-        """Initialize network camera connection via RTSP."""
-        url = self.config.rtsp_url
-        print(f"Connecting to camera: {self.config.name} at {self.config.ip_address}:{self.config.port}")
+        """Initialize USB camera connection."""
+        print(f"Opening camera: {self.config.name} (device {self.config.device_index})")
 
-        self._capture = cv2.VideoCapture(url)
+        self._capture = cv2.VideoCapture(self.config.device_index)
 
         if not self._capture.isOpened():
-            print(f"Failed to connect to camera: {self.config.name}")
+            print(f"Failed to open camera: {self.config.name}")
             self._capture = None
             return False
 
@@ -53,7 +41,7 @@ class Camera:
         # Set buffer size to minimize latency
         self._capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-        print(f"Connected to camera: {self.config.name}")
+        print(f"Opened camera: {self.config.name}")
         return True
 
     def close(self):
@@ -64,7 +52,7 @@ class Camera:
             self._capture = None
 
     def read_frame(self) -> Optional[np.ndarray]:
-        """Capture a single frame from the network camera."""
+        """Capture a single frame from the USB camera."""
         if self._capture is None:
             return None
 
@@ -88,14 +76,10 @@ class CameraManager:
                 config = CameraConfig(
                     id=cfg["id"],
                     name=cfg["name"],
-                    ip_address=cfg["ip_address"],
-                    port=cfg.get("port", 554),
-                    stream_path=cfg.get("stream_path", "stream"),
+                    device_index=cfg["device_index"],
                     resolution=tuple(cfg["resolution"]),
                     fps=cfg["fps"],
                     enabled=cfg["enabled"],
-                    username=cfg.get("username"),
-                    password=cfg.get("password"),
                 )
                 self.cameras[config.id] = Camera(config)
 

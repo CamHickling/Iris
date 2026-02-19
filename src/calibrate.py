@@ -22,7 +22,7 @@ class CalibrationTool:
         print("  CALIBRATION TOOL - Device Connectivity Check")
         print("=" * 60)
 
-        self._check_ip_cameras()
+        self._check_cameras()
         self._check_gopros()
         self._check_heart_rate()
         self._print_summary()
@@ -30,20 +30,20 @@ class CalibrationTool:
         all_passed = all(r["status"] == "PASS" for r in self._results)
         return all_passed
 
-    def _check_ip_cameras(self):
-        """Check each IP camera can connect and capture a frame."""
+    def _check_cameras(self):
+        """Check each USB camera can connect and capture a frame."""
         cameras_cfg = self.settings.get("cameras", [])
         if not cameras_cfg:
-            print("\nNo IP cameras configured.")
+            print("\nNo USB cameras configured.")
             return
 
-        print(f"\n--- IP Cameras ({len(cameras_cfg)}) ---")
+        print(f"\n--- USB Cameras ({len(cameras_cfg)}) ---")
 
         for cfg in cameras_cfg:
             if not cfg.get("enabled", True):
                 self._results.append({
                     "device": cfg["name"],
-                    "type": "IP Camera",
+                    "type": "USB Camera",
                     "status": "SKIP",
                     "detail": "Disabled in config",
                 })
@@ -52,14 +52,10 @@ class CalibrationTool:
             config = CameraConfig(
                 id=cfg["id"],
                 name=cfg["name"],
-                ip_address=cfg["ip_address"],
-                port=cfg.get("port", 554),
-                stream_path=cfg.get("stream_path", "stream"),
+                device_index=cfg["device_index"],
                 resolution=tuple(cfg["resolution"]),
                 fps=cfg["fps"],
                 enabled=cfg["enabled"],
-                username=cfg.get("username"),
-                password=cfg.get("password"),
             )
             camera = Camera(config)
 
@@ -90,7 +86,7 @@ class CalibrationTool:
 
             self._results.append({
                 "device": cfg["name"],
-                "type": "IP Camera",
+                "type": "USB Camera",
                 "status": status,
                 "detail": ", ".join(detail),
             })
