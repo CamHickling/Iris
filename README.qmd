@@ -1,0 +1,63 @@
+---
+title: "CaptureExpert"
+format:
+  html:
+    toc: true
+    theme: default
+---
+
+# CaptureExpert
+
+Multi-camera experiment capture tool with phase-based workflows.
+
+## Overview
+
+CaptureExpert manages multi-phase experiments involving synchronized capture from multiple cameras. Each experiment progresses through configurable phases (calibration, warmup, capture, review, etc.).
+
+## Structure
+
+```
+CaptureExpert/
+├── main.py              # Entry point
+├── settings.json        # Configuration file
+├── src/
+│   ├── experiment.py    # Experiment state machine
+│   ├── camera.py        # Camera interface
+│   ├── phase.py         # Phase definitions
+│   └── utils.py         # Helpers
+└── output/              # Captured data
+```
+
+## Setup
+
+```bash
+pip install -r requirements.txt
+```
+
+## Usage
+
+```bash
+python main.py                     # Run with default settings
+python main.py --config custom.json # Run with custom config
+```
+
+## Configuration
+
+Edit `settings.json` to configure:
+- **cameras**: Device indices, resolutions, frame rates
+- **phases**: Sequence of experiment phases with durations and capture intervals
+- **experiment**: Output directory, naming, format
+
+## Phases
+
+1. **Calibration** - Initial camera/subject calibration
+2. **Warm Up** - Preparation period
+3. **Main Capture** - Primary data collection
+4. **Review** - Post-capture review
+
+## TODO
+
+- [ ] Camera synchronization
+- [ ] Live preview
+- [ ] Phase transitions
+- [ ] Data export

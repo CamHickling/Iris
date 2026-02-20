@@ -1,20 +1,24 @@
 # CaptureExpert Setup Guide
 
-This guide walks through connecting all hardware devices and verifying they work before running an experiment.
+This guide walks through connecting all hardware devices and verifying they work before running an experiment. The primary target platform is **Windows 11**, with macOS notes included where relevant.
 
 ---
 
 ## Hardware Required
 
 - **2 USB Logitech webcams** (any Logitech USB webcam that supports 1080p/30fps)
-- **2 GoPro Hero 7 Silver cameras** with charged batteries and SD cards inserted
+- **2 GoPro cameras** (Hero 7 Silver or Hero 5 Session) with charged batteries and SD cards inserted
 - **2 USB WiFi adapters** (one per GoPro, for wireless control)
 - **1 Polar H10 heart rate strap** with chest band
-- **Mac computer** with available USB ports and Bluetooth
+- **Windows 11 PC** with available USB ports and Bluetooth
 
 ---
 
 ## 1. Install Dependencies
+
+### Python Environment
+
+Ensure Python 3.8+ is installed. Then install dependencies:
 
 ```bash
 pip install -r requirements.txt
@@ -22,35 +26,42 @@ pip install -r requirements.txt
 
 This installs: `opencv-python`, `numpy`, `goprocam`, `bleak`, and `pytest`.
 
+### Windows-Specific Notes
+
+- **Visual C++ Redistributable**: OpenCV requires the Visual C++ Redistributable. If you get DLL errors when importing `cv2`, download and install the latest [Visual C++ Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist) from Microsoft.
+- **Bluetooth drivers**: Ensure your PC's Bluetooth adapter has up-to-date drivers (check Device Manager > Bluetooth). The `bleak` library requires Windows 10 version 1709 (Fall Creators Update) or later.
+
 ---
 
 ## 2. Connect the USB Webcams
 
-1. Plug both Logitech webcams into USB ports on your Mac.
+1. Plug both Logitech webcams into USB ports on your PC. Avoid USB hubs if possible -- connect directly to the PC's USB ports for reliable bandwidth.
 2. The first webcam plugged in is typically assigned **device index 0**, the second **device index 1**. These indices are configured in `settings.json` under the `cameras` section.
-3. To verify macOS recognises the cameras, open **System Settings > Privacy & Security > Camera** and confirm your terminal app (Terminal, iTerm, etc.) has camera access.
+3. Windows should automatically install drivers for Logitech webcams. To verify Windows recognises the cameras, open **Device Manager** and check under **Cameras** or **Imaging devices** -- you should see both webcams listed.
 
 ### Finding the correct device indices
 
-If you're unsure which index maps to which webcam, you can test in Python:
+If you're unsure which index maps to which webcam, test in Python:
 
 ```python
 import cv2
 
 # Try index 0
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 if cap.isOpened():
     ret, frame = cap.read()
     print(f"Index 0: {frame.shape if ret else 'no frame'}")
     cap.release()
 
 # Try index 1
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
 if cap.isOpened():
     ret, frame = cap.read()
     print(f"Index 1: {frame.shape if ret else 'no frame'}")
     cap.release()
 ```
+
+> **Note**: The code automatically uses the DirectShow (`CAP_DSHOW`) backend on Windows for reliable USB camera access. If you test manually in Python on Windows, always include `cv2.CAP_DSHOW` as the second argument.
 
 If the indices don't match the expected front/side positions, swap the `device_index` values in `settings.json`:
 
@@ -61,57 +72,122 @@ If the indices don't match the expected front/side positions, swap the `device_i
 ]
 ```
 
+### macOS
+
+On macOS, open **System Settings > Privacy & Security > Camera** and confirm your terminal app has camera access. The code will auto-detect the correct backend on macOS (no DirectShow needed).
+
 ---
 
 ## 3. Connect the GoPro Cameras
 
-Each GoPro Hero 7 Silver is controlled over WiFi. Each camera needs its own dedicated USB WiFi adapter because each adapter connects to a different GoPro's WiFi network.
+Each GoPro is controlled over WiFi. Each camera needs its own **dedicated USB WiFi adapter** because each adapter connects to a different GoPro's WiFi network.
 
-### Steps
+### 3.1 Enable WiFi on each GoPro
 
-1. **Turn on WiFi on each GoPro**: On the Hero 7 Silver, swipe down on the touchscreen and tap **Connections > Wireless Connections > On**. Note each camera's WiFi network name and password (shown on the camera screen).
+**Hero 7 Silver**: Swipe down on the touchscreen and tap **Connections > Wireless Connections > On**. Note each camera's WiFi network name (SSID) and password (shown on the camera screen).
 
-2. **Plug in 2 USB WiFi adapters**. macOS will assign them network interface names (e.g. `en1`, `en2`).
+**Hero 5 Session**: Hold the Info/Wireless button to enable WiFi. The SSID and password can be found in the camera's settings menu.
 
-3. **Connect each WiFi adapter to a different GoPro's WiFi network**:
-   - Adapter on `en1` connects to GoPro #1's WiFi
-   - Adapter on `en2` connects to GoPro #2's WiFi
+### 3.2 Plug in 2 USB WiFi adapters
 
-   You can do this via **System Settings > Network**, or from the command line:
-   ```bash
-   networksetup -setairportnetwork en1 "GP-Hero7-XXXX" "password1"
-   networksetup -setairportnetwork en2 "GP-Hero7-YYYY" "password2"
-   ```
+Plug both USB WiFi adapters into available USB ports on your PC. Windows will recognise them as additional Wi-Fi adapters. Each will appear in **Settings > Network & Internet > Wi-Fi** and in **Device Manager > Network adapters**.
 
-4. **Verify the settings match** in `settings.json`:
-   ```json
-   "gopros": [
-     {"id": "gopro_hero7_1", "name": "GoPro Hero 7 Silver #1", "model": "hero7_silver",
-      "wifi_interface": "en1", "ip_address": "10.5.5.9", "enabled": true},
-     {"id": "gopro_hero7_2", "name": "GoPro Hero 7 Silver #2", "model": "hero7_silver",
-      "wifi_interface": "en2", "ip_address": "10.5.5.9", "enabled": true}
-   ]
-   ```
-   All GoPros use the same IP address (`10.5.5.9`) but are accessed through different WiFi interfaces.
+### 3.3 Find adapter names on Windows
 
-### Finding your WiFi interface names
+Open PowerShell or Command Prompt and run:
+
+```powershell
+netsh wlan show interfaces
+```
+
+This lists all WiFi interfaces. Each USB WiFi adapter will appear with a name like `Wi-Fi 2`, `Wi-Fi 3`, etc. The built-in WiFi card is typically `Wi-Fi`. Note the adapter names -- these go in the `wifi_interface` field in `settings.json`.
+
+### 3.4 Connect each adapter to a GoPro WiFi network
+
+**Option A -- Using Windows Settings (recommended for first-time setup)**:
+
+1. Open **Settings > Network & Internet > Wi-Fi**.
+2. Click on the specific adapter (e.g. "Wi-Fi 2") and connect it to GoPro #1's WiFi network.
+3. Click on the other adapter (e.g. "Wi-Fi 3") and connect it to GoPro #2's WiFi network.
+
+> **Tip**: In Windows 11, if you have multiple WiFi adapters, you can manage them individually via **Settings > Network & Internet > Advanced network settings**. Click on each adapter to see which network it's connected to.
+
+**Option B -- Using the command line**:
+
+```powershell
+netsh wlan connect name="GP-Hero7-XXXX" interface="Wi-Fi 2"
+netsh wlan connect name="GP-Hero7-YYYY" interface="Wi-Fi 3"
+```
+
+You may need to create WiFi profiles first if the networks aren't remembered:
+
+```powershell
+netsh wlan add profile filename="gopro1_profile.xml" interface="Wi-Fi 2"
+netsh wlan add profile filename="gopro2_profile.xml" interface="Wi-Fi 3"
+```
+
+### 3.5 Important: Routing for multiple GoPros
+
+Both GoPro cameras use the same IP address (`10.5.5.9`) on their respective WiFi networks. When two USB WiFi adapters are connected to two different GoPros, Windows has two routes to `10.5.5.9` and will only use one by default.
+
+To ensure both GoPros are reachable, you need to set different **route metrics** so Windows knows which adapter reaches which GoPro:
+
+1. Open **Control Panel > Network and Sharing Center > Change adapter settings**.
+2. Right-click the first USB WiFi adapter (connected to GoPro #1) > **Properties** > **Internet Protocol Version 4 (TCP/IPv4)** > **Properties** > **Advanced**.
+3. Uncheck **Automatic metric** and set **Interface metric** to `10`.
+4. Repeat for the second USB WiFi adapter and set its metric to `20`.
+
+Alternatively, from an **elevated (Administrator) PowerShell**:
+
+```powershell
+# Check current routes to see interface indices
+route print 10.5.5.*
+
+# Set metrics (replace IF_INDEX with the actual interface index from route print)
+netsh interface ip set interface "Wi-Fi 2" metric=10
+netsh interface ip set interface "Wi-Fi 3" metric=20
+```
+
+> **Note**: With different metrics, the goprocam library will connect to the GoPro accessible via the lower-metric adapter first. The code uses threaded parallel connections, so both GoPros should connect, but the routing configuration is essential for reliable dual-GoPro operation.
+
+### 3.6 Verify settings.json
+
+```json
+"gopros": [
+  {"id": "gopro_hero7_1", "name": "GoPro Hero 7 Silver #1", "model": "hero7_silver",
+   "wifi_interface": "Wi-Fi 2", "ip_address": "10.5.5.9", "enabled": true},
+  {"id": "gopro_hero7_2", "name": "GoPro Hero 7 Silver #2", "model": "hero7_silver",
+   "wifi_interface": "Wi-Fi 3", "ip_address": "10.5.5.9", "enabled": true}
+]
+```
+
+Replace `"Wi-Fi 2"` and `"Wi-Fi 3"` with the actual adapter names shown by `netsh wlan show interfaces`.
+
+### macOS
+
+On macOS, USB WiFi adapters are assigned interface names like `en1`, `en2`. Find them with:
 
 ```bash
 networksetup -listallhardwareports
 ```
 
-Look for entries labelled "Wi-Fi" or "USB 10/100/1000 LAN" -- the `Device` field (e.g. `en1`) is what goes in the `wifi_interface` setting.
+Connect to GoPro networks with:
+
+```bash
+networksetup -setairportnetwork en1 "GP-Hero7-XXXX" "password1"
+networksetup -setairportnetwork en2 "GP-Hero7-YYYY" "password2"
+```
 
 ---
 
 ## 4. Connect the Polar H10 Heart Rate Strap
 
-The Polar H10 connects over Bluetooth Low Energy (BLE). No pairing through macOS Bluetooth settings is needed -- the `bleak` library handles the connection directly.
+The Polar H10 connects over Bluetooth Low Energy (BLE). No pairing through Windows Bluetooth settings is needed -- the `bleak` library handles the connection directly.
 
 ### Steps
 
 1. **Moisten the electrode pads** on the inside of the chest strap and put it on. The strap must detect skin contact to broadcast a signal.
-2. **Ensure Bluetooth is enabled** on your Mac.
+2. **Ensure Bluetooth is enabled** on your PC. Check in **Settings > Bluetooth & devices** -- the toggle should be On.
 3. In `settings.json`, heart rate is already enabled:
    ```json
    "heart_rate": {
@@ -120,9 +196,16 @@ The Polar H10 connects over Bluetooth Low Energy (BLE). No pairing through macOS
      "ecg_enabled": false
    }
    ```
-   With `device_address` set to `null`, the software will automatically scan for any nearby Polar H10. If you have multiple Polar H10 straps nearby and need to target a specific one, set `device_address` to its BLE MAC address (e.g. `"A0:9E:1A:XX:XX:XX"`).
+   With `device_address` set to `null`, the software will automatically scan for any nearby Polar H10. If you have multiple Polar H10 straps nearby and need to target a specific one, set `device_address` to its BLE address (e.g. `"A0:9E:1A:XX:XX:XX"`).
 
-4. **Grant Bluetooth access**: macOS may prompt your terminal app for Bluetooth permission on first run. Accept this.
+4. **Close other Bluetooth apps**: Make sure no other app (Polar Beat, Polar Flow, etc.) is currently connected to the strap. BLE only allows one active connection at a time.
+
+### Windows-Specific Notes
+
+- The `bleak` library uses the Windows Bluetooth stack directly. No special drivers or pairing steps are needed.
+- If BLE scanning fails, ensure your Bluetooth adapter supports BLE 4.0+. Check **Device Manager > Bluetooth** for adapter details.
+- Some antivirus software can block BLE scanning. If the Polar H10 is not found, try temporarily disabling real-time protection.
+- If using a USB Bluetooth adapter (rather than built-in), ensure its drivers are installed and it appears in Device Manager.
 
 ### Optional: Enable ECG
 
@@ -171,13 +254,7 @@ You'll see output like:
 ============================================================
 ```
 
-If any device shows **FAIL**, check:
-
-| Device | Common issues |
-|---|---|
-| USB webcam | Wrong device index, camera not plugged in, macOS camera permission denied |
-| GoPro | WiFi adapter not connected to GoPro's network, GoPro powered off or asleep, wrong interface name in config |
-| Polar H10 | Strap not worn / electrodes dry, Bluetooth off, macOS Bluetooth permission denied, another app connected to the strap |
+If any device shows **FAIL**, check the troubleshooting table below.
 
 ---
 
@@ -217,6 +294,13 @@ python main.py --undistort /path/to/gopro/videos/
 python main.py --undistort /path/to/clip.mp4
 ```
 
+On Windows, use backslashes or forward slashes:
+
+```bash
+python main.py --undistort C:\Users\YourName\Videos\gopro\
+python main.py --undistort C:/Users/YourName/Videos/gopro/
+```
+
 Output files are saved alongside originals with an `_undistorted` suffix.
 
 ---
@@ -249,10 +333,37 @@ GoPro video must be downloaded separately from the cameras' SD cards.
 
 ## Troubleshooting
 
-**Webcam shows black frames or wrong resolution**: Some webcams need a moment to adjust exposure. The first few frames may be dark. If resolution doesn't match, check the webcam supports 1920x1080 -- lower the `resolution` in `settings.json` if needed (e.g. `[1280, 720]`).
+### USB Webcams
 
-**GoPro disconnects during experiment**: GoPros drop WiFi if they don't receive periodic keep-alive signals. The software sends these automatically every 2.5 seconds. If disconnects happen, check the WiFi adapter signal strength and move the adapters closer to the cameras.
+| Problem | Solution |
+|---|---|
+| Camera not detected | Check **Device Manager > Cameras** -- the webcam should be listed. Try a different USB port. Avoid USB hubs. |
+| Black frames or wrong resolution | Some webcams need a moment to adjust exposure. The first few frames may be dark. If resolution doesn't match, check the webcam supports 1920x1080 -- lower `resolution` in `settings.json` if needed (e.g. `[1280, 720]`). |
+| `cv2.VideoCapture` fails silently | On Windows, the code uses the DirectShow backend (`CAP_DSHOW`). If issues persist, try updating the webcam drivers from the Logitech website. |
+| Wrong camera on wrong index | Swap `device_index` values in `settings.json`, or unplug both cameras and plug them in one at a time to identify which gets index 0 vs 1. |
 
-**Polar H10 not found**: Make sure the strap is on your body with moistened electrodes. The H10 only broadcasts a BLE signal when it detects skin contact. Also ensure no other app (e.g. Polar Beat, Polar Flow) is currently connected to the strap, as BLE only allows one connection.
+### GoPro Cameras
 
-**macOS permission prompts**: The first time you run CaptureExpert, macOS may ask for Camera and Bluetooth access for your terminal. Grant both. If you accidentally denied, go to **System Settings > Privacy & Security** and add your terminal app manually.
+| Problem | Solution |
+|---|---|
+| Can't connect to GoPro WiFi | Ensure the GoPro's WiFi is enabled and broadcasting. The WiFi LED should be blinking. Check that the USB WiFi adapter is working in Device Manager. |
+| WiFi adapter not connecting | Run `netsh wlan show interfaces` to verify the adapter is detected. Try connecting via Windows Settings manually first. |
+| Only one GoPro connects | Both GoPros use IP `10.5.5.9`. Ensure route metrics are configured differently for each WiFi adapter (see Section 3.5). |
+| GoPro disconnects during experiment | GoPros drop WiFi if they don't receive periodic keep-alive signals. The software sends these automatically every 2.5 seconds. Check WiFi adapter signal strength and move adapters closer to the cameras. |
+| `goprocam` connection timeout | Verify the WiFi adapter is connected to the GoPro's network by pinging: `ping 10.5.5.9`. If no response, reconnect the WiFi adapter to the GoPro network. |
+
+### Polar H10
+
+| Problem | Solution |
+|---|---|
+| Not found during scan | Make sure the strap is on your body with moistened electrodes. The H10 only broadcasts BLE when it detects skin contact. Also ensure no other app is connected to the strap. |
+| Bluetooth permission error | Ensure Bluetooth is enabled in **Settings > Bluetooth & devices**. Some antivirus software blocks BLE -- try disabling real-time protection temporarily. |
+| Connection drops | Ensure the PC's Bluetooth adapter supports BLE 4.0+. Stay within Bluetooth range (~10m). Avoid interference from other Bluetooth devices. |
+
+### General
+
+| Problem | Solution |
+|---|---|
+| `ModuleNotFoundError` on import | Run `pip install -r requirements.txt` to install all dependencies. |
+| Permission errors writing output | Ensure the `output/` directory path in `settings.json` is writable. Use an absolute path if the default `./output` causes issues. |
+| Ctrl+C doesn't stop cleanly | On Windows, Ctrl+C in the terminal should trigger KeyboardInterrupt. If the process hangs, use Ctrl+Break or close the terminal window. The teardown handler will attempt to disconnect all devices. |

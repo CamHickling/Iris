@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest:*)",
+      "Bash(pip install:*)",
+      "Bash(netsh wlan show:*)",
+      "Bash(netsh interface:*)",
+      "Bash(powershell \"Get-NetAdapter | Format-Table Name, InterfaceDescription, Status, MediaType, MacAddress -AutoSize\")",
+      "Bash(python:*)"
+    ]
+  }
+}

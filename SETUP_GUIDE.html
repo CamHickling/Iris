@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>setup_guide</title>
+<title>CaptureExpert Setup Guide</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -69,124 +69,259 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <link href="SETUP_GUIDE_files/libs/quarto-html/quarto-syntax-highlighting-ed96de9b727972fe78a7b5d16c58bf87.css" rel="stylesheet" id="quarto-text-highlighting-styles">
 <script src="SETUP_GUIDE_files/libs/bootstrap/bootstrap.min.js"></script>
 <link href="SETUP_GUIDE_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="SETUP_GUIDE_files/libs/bootstrap/bootstrap-d6a003b94517c951b2d65075d42fb01b.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<link href="SETUP_GUIDE_files/libs/bootstrap/bootstrap-9e3ffae467580fdb927a41352e75a2e0.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
 
 
 </head>
 
-<body class="fullcontent quarto-light">
+<body class="quarto-light">
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
-
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+  <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">Table of contents</h2>
+   
+  <ul>
+  <li><a href="#captureexpert-setup-guide" id="toc-captureexpert-setup-guide" class="nav-link active" data-scroll-target="#captureexpert-setup-guide">CaptureExpert Setup Guide</a>
+  <ul class="collapse">
+  <li><a href="#hardware-required" id="toc-hardware-required" class="nav-link" data-scroll-target="#hardware-required">Hardware Required</a></li>
+  <li><a href="#install-dependencies" id="toc-install-dependencies" class="nav-link" data-scroll-target="#install-dependencies">1. Install Dependencies</a>
+  <ul class="collapse">
+  <li><a href="#python-environment" id="toc-python-environment" class="nav-link" data-scroll-target="#python-environment">Python Environment</a></li>
+  <li><a href="#windows-specific-notes" id="toc-windows-specific-notes" class="nav-link" data-scroll-target="#windows-specific-notes">Windows-Specific Notes</a></li>
+  </ul></li>
+  <li><a href="#connect-the-usb-webcams" id="toc-connect-the-usb-webcams" class="nav-link" data-scroll-target="#connect-the-usb-webcams">2. Connect the USB Webcams</a>
+  <ul class="collapse">
+  <li><a href="#finding-the-correct-device-indices" id="toc-finding-the-correct-device-indices" class="nav-link" data-scroll-target="#finding-the-correct-device-indices">Finding the correct device indices</a></li>
+  <li><a href="#macos" id="toc-macos" class="nav-link" data-scroll-target="#macos">macOS</a></li>
+  </ul></li>
+  <li><a href="#connect-the-gopro-cameras" id="toc-connect-the-gopro-cameras" class="nav-link" data-scroll-target="#connect-the-gopro-cameras">3. Connect the GoPro Cameras</a>
+  <ul class="collapse">
+  <li><a href="#enable-wifi-on-each-gopro" id="toc-enable-wifi-on-each-gopro" class="nav-link" data-scroll-target="#enable-wifi-on-each-gopro">3.1 Enable WiFi on each GoPro</a></li>
+  <li><a href="#plug-in-2-usb-wifi-adapters" id="toc-plug-in-2-usb-wifi-adapters" class="nav-link" data-scroll-target="#plug-in-2-usb-wifi-adapters">3.2 Plug in 2 USB WiFi adapters</a></li>
+  <li><a href="#find-adapter-names-on-windows" id="toc-find-adapter-names-on-windows" class="nav-link" data-scroll-target="#find-adapter-names-on-windows">3.3 Find adapter names on Windows</a></li>
+  <li><a href="#connect-each-adapter-to-a-gopro-wifi-network" id="toc-connect-each-adapter-to-a-gopro-wifi-network" class="nav-link" data-scroll-target="#connect-each-adapter-to-a-gopro-wifi-network">3.4 Connect each adapter to a GoPro WiFi network</a></li>
+  <li><a href="#important-routing-for-multiple-gopros" id="toc-important-routing-for-multiple-gopros" class="nav-link" data-scroll-target="#important-routing-for-multiple-gopros">3.5 Important: Routing for multiple GoPros</a></li>
+  <li><a href="#verify-settings.json" id="toc-verify-settings.json" class="nav-link" data-scroll-target="#verify-settings.json">3.6 Verify settings.json</a></li>
+  <li><a href="#macos-1" id="toc-macos-1" class="nav-link" data-scroll-target="#macos-1">macOS</a></li>
+  </ul></li>
+  <li><a href="#connect-the-polar-h10-heart-rate-strap" id="toc-connect-the-polar-h10-heart-rate-strap" class="nav-link" data-scroll-target="#connect-the-polar-h10-heart-rate-strap">4. Connect the Polar H10 Heart Rate Strap</a>
+  <ul class="collapse">
+  <li><a href="#steps" id="toc-steps" class="nav-link" data-scroll-target="#steps">Steps</a></li>
+  <li><a href="#windows-specific-notes-1" id="toc-windows-specific-notes-1" class="nav-link" data-scroll-target="#windows-specific-notes-1">Windows-Specific Notes</a></li>
+  <li><a href="#optional-enable-ecg" id="toc-optional-enable-ecg" class="nav-link" data-scroll-target="#optional-enable-ecg">Optional: Enable ECG</a></li>
+  </ul></li>
+  <li><a href="#verify-everything-with-calibration-mode" id="toc-verify-everything-with-calibration-mode" class="nav-link" data-scroll-target="#verify-everything-with-calibration-mode">5. Verify Everything with Calibration Mode</a></li>
+  <li><a href="#run-an-experiment" id="toc-run-an-experiment" class="nav-link" data-scroll-target="#run-an-experiment">6. Run an Experiment</a></li>
+  <li><a href="#post-processing-gopro-lens-correction" id="toc-post-processing-gopro-lens-correction" class="nav-link" data-scroll-target="#post-processing-gopro-lens-correction">7. Post-Processing: GoPro Lens Correction</a></li>
+  <li><a href="#output-files" id="toc-output-files" class="nav-link" data-scroll-target="#output-files">Output Files</a></li>
+  <li><a href="#troubleshooting" id="toc-troubleshooting" class="nav-link" data-scroll-target="#troubleshooting">Troubleshooting</a>
+  <ul class="collapse">
+  <li><a href="#usb-webcams" id="toc-usb-webcams" class="nav-link" data-scroll-target="#usb-webcams">USB Webcams</a></li>
+  <li><a href="#gopro-cameras" id="toc-gopro-cameras" class="nav-link" data-scroll-target="#gopro-cameras">GoPro Cameras</a></li>
+  <li><a href="#polar-h10" id="toc-polar-h10" class="nav-link" data-scroll-target="#polar-h10">Polar H10</a></li>
+  <li><a href="#general" id="toc-general" class="nav-link" data-scroll-target="#general">General</a></li>
+  </ul></li>
+  </ul></li>
+  </ul>
+</nav>
+</div>
 <main class="content" id="quarto-document-content">
 
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">CaptureExpert Setup Guide</h1>
+</div>
 
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
 
 
 <section id="captureexpert-setup-guide" class="level1">
 <h1>CaptureExpert Setup Guide</h1>
-<p>This guide walks through connecting all hardware devices and verifying they work before running an experiment.</p>
+<p>This guide walks through connecting all hardware devices and verifying they work before running an experiment. The primary target platform is <strong>Windows 11</strong>, with macOS notes included where relevant.</p>
 <hr>
 <section id="hardware-required" class="level2">
 <h2 class="anchored" data-anchor-id="hardware-required">Hardware Required</h2>
 <ul>
 <li><strong>2 USB Logitech webcams</strong> (any Logitech USB webcam that supports 1080p/30fps)</li>
-<li><strong>2 GoPro Hero 7 Silver cameras</strong> with charged batteries and SD cards inserted</li>
+<li><strong>2 GoPro cameras</strong> (Hero 7 Silver or Hero 5 Session) with charged batteries and SD cards inserted</li>
 <li><strong>2 USB WiFi adapters</strong> (one per GoPro, for wireless control)</li>
 <li><strong>1 Polar H10 heart rate strap</strong> with chest band</li>
-<li><strong>Mac computer</strong> with available USB ports and Bluetooth</li>
+<li><strong>Windows 11 PC</strong> with available USB ports and Bluetooth</li>
 </ul>
 <hr>
 </section>
 <section id="install-dependencies" class="level2">
 <h2 class="anchored" data-anchor-id="install-dependencies">1. Install Dependencies</h2>
+<section id="python-environment" class="level3">
+<h3 class="anchored" data-anchor-id="python-environment">Python Environment</h3>
+<p>Ensure Python 3.8+ is installed. Then install dependencies:</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">pip</span> install <span class="at">-r</span> requirements.txt</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>This installs: <code>opencv-python</code>, <code>numpy</code>, <code>goprocam</code>, <code>bleak</code>, and <code>pytest</code>.</p>
+</section>
+<section id="windows-specific-notes" class="level3">
+<h3 class="anchored" data-anchor-id="windows-specific-notes">Windows-Specific Notes</h3>
+<ul>
+<li><strong>Visual C++ Redistributable</strong>: OpenCV requires the Visual C++ Redistributable. If you get DLL errors when importing <code>cv2</code>, download and install the latest <a href="https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist">Visual C++ Redistributable</a> from Microsoft.</li>
+<li><strong>Bluetooth drivers</strong>: Ensure your PC’s Bluetooth adapter has up-to-date drivers (check Device Manager &gt; Bluetooth). The <code>bleak</code> library requires Windows 10 version 1709 (Fall Creators Update) or later.</li>
+</ul>
 <hr>
+</section>
 </section>
 <section id="connect-the-usb-webcams" class="level2">
 <h2 class="anchored" data-anchor-id="connect-the-usb-webcams">2. Connect the USB Webcams</h2>
 <ol type="1">
-<li>Plug both Logitech webcams into USB ports on your Mac.</li>
+<li>Plug both Logitech webcams into USB ports on your PC. Avoid USB hubs if possible – connect directly to the PC’s USB ports for reliable bandwidth.</li>
 <li>The first webcam plugged in is typically assigned <strong>device index 0</strong>, the second <strong>device index 1</strong>. These indices are configured in <code>settings.json</code> under the <code>cameras</code> section.</li>
-<li>To verify macOS recognises the cameras, open <strong>System Settings &gt; Privacy &amp; Security &gt; Camera</strong> and confirm your terminal app (Terminal, iTerm, etc.) has camera access.</li>
+<li>Windows should automatically install drivers for Logitech webcams. To verify Windows recognises the cameras, open <strong>Device Manager</strong> and check under <strong>Cameras</strong> or <strong>Imaging devices</strong> – you should see both webcams listed.</li>
 </ol>
 <section id="finding-the-correct-device-indices" class="level3">
 <h3 class="anchored" data-anchor-id="finding-the-correct-device-indices">Finding the correct device indices</h3>
-<p>If you’re unsure which index maps to which webcam, you can test in Python:</p>
+<p>If you’re unsure which index maps to which webcam, test in Python:</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> cv2</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Try index 0</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>cap <span class="op">=</span> cv2.VideoCapture(<span class="dv">0</span>)</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>cap <span class="op">=</span> cv2.VideoCapture(<span class="dv">0</span>, cv2.CAP_DSHOW)</span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> cap.isOpened():</span>
 <span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    ret, frame <span class="op">=</span> cap.read()</span>
 <span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"Index 0: </span><span class="sc">{</span>frame<span class="sc">.</span>shape <span class="cf">if</span> ret <span class="cf">else</span> <span class="st">'no frame'</span><span class="sc">}</span><span class="ss">"</span>)</span>
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>    cap.release()</span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Try index 1</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>cap <span class="op">=</span> cv2.VideoCapture(<span class="dv">1</span>)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>cap <span class="op">=</span> cv2.VideoCapture(<span class="dv">1</span>, cv2.CAP_DSHOW)</span>
 <span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> cap.isOpened():</span>
 <span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    ret, frame <span class="op">=</span> cap.read()</span>
 <span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"Index 1: </span><span class="sc">{</span>frame<span class="sc">.</span>shape <span class="cf">if</span> ret <span class="cf">else</span> <span class="st">'no frame'</span><span class="sc">}</span><span class="ss">"</span>)</span>
 <span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    cap.release()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<blockquote class="blockquote">
+<p><strong>Note</strong>: The code automatically uses the DirectShow (<code>CAP_DSHOW</code>) backend on Windows for reliable USB camera access. If you test manually in Python on Windows, always include <code>cv2.CAP_DSHOW</code> as the second argument.</p>
+</blockquote>
 <p>If the indices don’t match the expected front/side positions, swap the <code>device_index</code> values in <code>settings.json</code>:</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode json code-with-copy"><code class="sourceCode json"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="er">"cameras":</span> <span class="ot">[</span></span>
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">{</span><span class="dt">"id"</span><span class="fu">:</span> <span class="st">"usb_0"</span><span class="fu">,</span> <span class="dt">"name"</span><span class="fu">:</span> <span class="st">"Logitech Webcam 1"</span><span class="fu">,</span> <span class="dt">"device_index"</span><span class="fu">:</span> <span class="dv">0</span><span class="fu">,</span> <span class="er">...</span><span class="fu">}</span><span class="ot">,</span></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">{</span><span class="dt">"id"</span><span class="fu">:</span> <span class="st">"usb_1"</span><span class="fu">,</span> <span class="dt">"name"</span><span class="fu">:</span> <span class="st">"Logitech Webcam 2"</span><span class="fu">,</span> <span class="dt">"device_index"</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span> <span class="er">...</span><span class="fu">}</span></span>
 <span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="ot">]</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="macos" class="level3">
+<h3 class="anchored" data-anchor-id="macos">macOS</h3>
+<p>On macOS, open <strong>System Settings &gt; Privacy &amp; Security &gt; Camera</strong> and confirm your terminal app has camera access. The code will auto-detect the correct backend on macOS (no DirectShow needed).</p>
 <hr>
 </section>
 </section>
 <section id="connect-the-gopro-cameras" class="level2">
 <h2 class="anchored" data-anchor-id="connect-the-gopro-cameras">3. Connect the GoPro Cameras</h2>
-<p>Each GoPro Hero 7 Silver is controlled over WiFi. Each camera needs its own dedicated USB WiFi adapter because each adapter connects to a different GoPro’s WiFi network.</p>
-<section id="steps" class="level3">
-<h3 class="anchored" data-anchor-id="steps">Steps</h3>
-<ol type="1">
-<li><p><strong>Turn on WiFi on each GoPro</strong>: On the Hero 7 Silver, swipe down on the touchscreen and tap <strong>Connections &gt; Wireless Connections &gt; On</strong>. Note each camera’s WiFi network name and password (shown on the camera screen).</p></li>
-<li><p><strong>Plug in 2 USB WiFi adapters</strong>. macOS will assign them network interface names (e.g.&nbsp;<code>en1</code>, <code>en2</code>).</p></li>
-<li><p><strong>Connect each WiFi adapter to a different GoPro’s WiFi network</strong>:</p>
-<ul>
-<li>Adapter on <code>en1</code> connects to GoPro #1’s WiFi</li>
-<li>Adapter on <code>en2</code> connects to GoPro #2’s WiFi</li>
-</ul>
-<p>You can do this via <strong>System Settings &gt; Network</strong>, or from the command line:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">networksetup</span> <span class="at">-setairportnetwork</span> en1 <span class="st">"GP-Hero7-XXXX"</span> <span class="st">"password1"</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="ex">networksetup</span> <span class="at">-setairportnetwork</span> en2 <span class="st">"GP-Hero7-YYYY"</span> <span class="st">"password2"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div></li>
-<li><p><strong>Verify the settings match</strong> in <code>settings.json</code>:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode json code-with-copy"><code class="sourceCode json"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="er">"gopros":</span> <span class="ot">[</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">{</span><span class="dt">"id"</span><span class="fu">:</span> <span class="st">"gopro_hero7_1"</span><span class="fu">,</span> <span class="dt">"name"</span><span class="fu">:</span> <span class="st">"GoPro Hero 7 Silver #1"</span><span class="fu">,</span> <span class="dt">"model"</span><span class="fu">:</span> <span class="st">"hero7_silver"</span><span class="fu">,</span></span>
-<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>   <span class="dt">"wifi_interface"</span><span class="fu">:</span> <span class="st">"en1"</span><span class="fu">,</span> <span class="dt">"ip_address"</span><span class="fu">:</span> <span class="st">"10.5.5.9"</span><span class="fu">,</span> <span class="dt">"enabled"</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">}</span><span class="ot">,</span></span>
-<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">{</span><span class="dt">"id"</span><span class="fu">:</span> <span class="st">"gopro_hero7_2"</span><span class="fu">,</span> <span class="dt">"name"</span><span class="fu">:</span> <span class="st">"GoPro Hero 7 Silver #2"</span><span class="fu">,</span> <span class="dt">"model"</span><span class="fu">:</span> <span class="st">"hero7_silver"</span><span class="fu">,</span></span>
-<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>   <span class="dt">"wifi_interface"</span><span class="fu">:</span> <span class="st">"en2"</span><span class="fu">,</span> <span class="dt">"ip_address"</span><span class="fu">:</span> <span class="st">"10.5.5.9"</span><span class="fu">,</span> <span class="dt">"enabled"</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">}</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="ot">]</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>All GoPros use the same IP address (<code>10.5.5.9</code>) but are accessed through different WiFi interfaces.</p></li>
-</ol>
+<p>Each GoPro is controlled over WiFi. Each camera needs its own <strong>dedicated USB WiFi adapter</strong> because each adapter connects to a different GoPro’s WiFi network.</p>
+<section id="enable-wifi-on-each-gopro" class="level3">
+<h3 class="anchored" data-anchor-id="enable-wifi-on-each-gopro">3.1 Enable WiFi on each GoPro</h3>
+<p><strong>Hero 7 Silver</strong>: Swipe down on the touchscreen and tap <strong>Connections &gt; Wireless Connections &gt; On</strong>. Note each camera’s WiFi network name (SSID) and password (shown on the camera screen).</p>
+<p><strong>Hero 5 Session</strong>: Hold the Info/Wireless button to enable WiFi. The SSID and password can be found in the camera’s settings menu.</p>
 </section>
-<section id="finding-your-wifi-interface-names" class="level3">
-<h3 class="anchored" data-anchor-id="finding-your-wifi-interface-names">Finding your WiFi interface names</h3>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="ex">networksetup</span> <span class="at">-listallhardwareports</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>Look for entries labelled “Wi-Fi” or “USB 10/100/1000 LAN” – the <code>Device</code> field (e.g.&nbsp;<code>en1</code>) is what goes in the <code>wifi_interface</code> setting.</p>
+<section id="plug-in-2-usb-wifi-adapters" class="level3">
+<h3 class="anchored" data-anchor-id="plug-in-2-usb-wifi-adapters">3.2 Plug in 2 USB WiFi adapters</h3>
+<p>Plug both USB WiFi adapters into available USB ports on your PC. Windows will recognise them as additional Wi-Fi adapters. Each will appear in <strong>Settings &gt; Network &amp; Internet &gt; Wi-Fi</strong> and in <strong>Device Manager &gt; Network adapters</strong>.</p>
+</section>
+<section id="find-adapter-names-on-windows" class="level3">
+<h3 class="anchored" data-anchor-id="find-adapter-names-on-windows">3.3 Find adapter names on Windows</h3>
+<p>Open PowerShell or Command Prompt and run:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>netsh wlan show interfaces</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>This lists all WiFi interfaces. Each USB WiFi adapter will appear with a name like <code>Wi-Fi 2</code>, <code>Wi-Fi 3</code>, etc. The built-in WiFi card is typically <code>Wi-Fi</code>. Note the adapter names – these go in the <code>wifi_interface</code> field in <code>settings.json</code>.</p>
+</section>
+<section id="connect-each-adapter-to-a-gopro-wifi-network" class="level3">
+<h3 class="anchored" data-anchor-id="connect-each-adapter-to-a-gopro-wifi-network">3.4 Connect each adapter to a GoPro WiFi network</h3>
+<p><strong>Option A – Using Windows Settings (recommended for first-time setup)</strong>:</p>
+<ol type="1">
+<li>Open <strong>Settings &gt; Network &amp; Internet &gt; Wi-Fi</strong>.</li>
+<li>Click on the specific adapter (e.g.&nbsp;“Wi-Fi 2”) and connect it to GoPro #1’s WiFi network.</li>
+<li>Click on the other adapter (e.g.&nbsp;“Wi-Fi 3”) and connect it to GoPro #2’s WiFi network.</li>
+</ol>
+<blockquote class="blockquote">
+<p><strong>Tip</strong>: In Windows 11, if you have multiple WiFi adapters, you can manage them individually via <strong>Settings &gt; Network &amp; Internet &gt; Advanced network settings</strong>. Click on each adapter to see which network it’s connected to.</p>
+</blockquote>
+<p><strong>Option B – Using the command line</strong>:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>netsh wlan connect name<span class="op">=</span><span class="st">"GP-Hero7-XXXX"</span> interface<span class="op">=</span><span class="st">"Wi-Fi 2"</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>netsh wlan connect name<span class="op">=</span><span class="st">"GP-Hero7-YYYY"</span> interface<span class="op">=</span><span class="st">"Wi-Fi 3"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>You may need to create WiFi profiles first if the networks aren’t remembered:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>netsh wlan add profile filename<span class="op">=</span><span class="st">"gopro1_profile.xml"</span> interface<span class="op">=</span><span class="st">"Wi-Fi 2"</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>netsh wlan add profile filename<span class="op">=</span><span class="st">"gopro2_profile.xml"</span> interface<span class="op">=</span><span class="st">"Wi-Fi 3"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="important-routing-for-multiple-gopros" class="level3">
+<h3 class="anchored" data-anchor-id="important-routing-for-multiple-gopros">3.5 Important: Routing for multiple GoPros</h3>
+<p>Both GoPro cameras use the same IP address (<code>10.5.5.9</code>) on their respective WiFi networks. When two USB WiFi adapters are connected to two different GoPros, Windows has two routes to <code>10.5.5.9</code> and will only use one by default.</p>
+<p>To ensure both GoPros are reachable, you need to set different <strong>route metrics</strong> so Windows knows which adapter reaches which GoPro:</p>
+<ol type="1">
+<li>Open <strong>Control Panel &gt; Network and Sharing Center &gt; Change adapter settings</strong>.</li>
+<li>Right-click the first USB WiFi adapter (connected to GoPro #1) &gt; <strong>Properties</strong> &gt; <strong>Internet Protocol Version 4 (TCP/IPv4)</strong> &gt; <strong>Properties</strong> &gt; <strong>Advanced</strong>.</li>
+<li>Uncheck <strong>Automatic metric</strong> and set <strong>Interface metric</strong> to <code>10</code>.</li>
+<li>Repeat for the second USB WiFi adapter and set its metric to <code>20</code>.</li>
+</ol>
+<p>Alternatively, from an <strong>elevated (Administrator) PowerShell</strong>:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode powershell code-with-copy"><code class="sourceCode powershell"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Check current routes to see interface indices</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>route print <span class="dv">10.5</span><span class="op">.</span><span class="dv">5</span><span class="op">.*</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Set metrics (replace IF_INDEX with the actual interface index from route print)</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>netsh interface ip <span class="fu">set</span> interface <span class="st">"Wi-Fi 2"</span> metric<span class="op">=</span><span class="dv">10</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="dt">netsh</span> interface ip <span class="fu">set</span> interface <span class="st">"Wi-Fi 3"</span> metric<span class="op">=</span><span class="dv">20</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<blockquote class="blockquote">
+<p><strong>Note</strong>: With different metrics, the goprocam library will connect to the GoPro accessible via the lower-metric adapter first. The code uses threaded parallel connections, so both GoPros should connect, but the routing configuration is essential for reliable dual-GoPro operation.</p>
+</blockquote>
+</section>
+<section id="verify-settings.json" class="level3">
+<h3 class="anchored" data-anchor-id="verify-settings.json">3.6 Verify settings.json</h3>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode json code-with-copy"><code class="sourceCode json"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="er">"gopros":</span> <span class="ot">[</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">{</span><span class="dt">"id"</span><span class="fu">:</span> <span class="st">"gopro_hero7_1"</span><span class="fu">,</span> <span class="dt">"name"</span><span class="fu">:</span> <span class="st">"GoPro Hero 7 Silver #1"</span><span class="fu">,</span> <span class="dt">"model"</span><span class="fu">:</span> <span class="st">"hero7_silver"</span><span class="fu">,</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>   <span class="dt">"wifi_interface"</span><span class="fu">:</span> <span class="st">"Wi-Fi 2"</span><span class="fu">,</span> <span class="dt">"ip_address"</span><span class="fu">:</span> <span class="st">"10.5.5.9"</span><span class="fu">,</span> <span class="dt">"enabled"</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">{</span><span class="dt">"id"</span><span class="fu">:</span> <span class="st">"gopro_hero7_2"</span><span class="fu">,</span> <span class="dt">"name"</span><span class="fu">:</span> <span class="st">"GoPro Hero 7 Silver #2"</span><span class="fu">,</span> <span class="dt">"model"</span><span class="fu">:</span> <span class="st">"hero7_silver"</span><span class="fu">,</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>   <span class="dt">"wifi_interface"</span><span class="fu">:</span> <span class="st">"Wi-Fi 3"</span><span class="fu">,</span> <span class="dt">"ip_address"</span><span class="fu">:</span> <span class="st">"10.5.5.9"</span><span class="fu">,</span> <span class="dt">"enabled"</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">}</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="ot">]</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Replace <code>"Wi-Fi 2"</code> and <code>"Wi-Fi 3"</code> with the actual adapter names shown by <code>netsh wlan show interfaces</code>.</p>
+</section>
+<section id="macos-1" class="level3">
+<h3 class="anchored" data-anchor-id="macos-1">macOS</h3>
+<p>On macOS, USB WiFi adapters are assigned interface names like <code>en1</code>, <code>en2</code>. Find them with:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb9"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="ex">networksetup</span> <span class="at">-listallhardwareports</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Connect to GoPro networks with:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="ex">networksetup</span> <span class="at">-setairportnetwork</span> en1 <span class="st">"GP-Hero7-XXXX"</span> <span class="st">"password1"</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="ex">networksetup</span> <span class="at">-setairportnetwork</span> en2 <span class="st">"GP-Hero7-YYYY"</span> <span class="st">"password2"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <hr>
 </section>
 </section>
 <section id="connect-the-polar-h10-heart-rate-strap" class="level2">
 <h2 class="anchored" data-anchor-id="connect-the-polar-h10-heart-rate-strap">4. Connect the Polar H10 Heart Rate Strap</h2>
-<p>The Polar H10 connects over Bluetooth Low Energy (BLE). No pairing through macOS Bluetooth settings is needed – the <code>bleak</code> library handles the connection directly.</p>
-<section id="steps-1" class="level3">
-<h3 class="anchored" data-anchor-id="steps-1">Steps</h3>
+<p>The Polar H10 connects over Bluetooth Low Energy (BLE). No pairing through Windows Bluetooth settings is needed – the <code>bleak</code> library handles the connection directly.</p>
+<section id="steps" class="level3">
+<h3 class="anchored" data-anchor-id="steps">Steps</h3>
 <ol type="1">
 <li><p><strong>Moisten the electrode pads</strong> on the inside of the chest strap and put it on. The strap must detect skin contact to broadcast a signal.</p></li>
-<li><p><strong>Ensure Bluetooth is enabled</strong> on your Mac.</p></li>
+<li><p><strong>Ensure Bluetooth is enabled</strong> on your PC. Check in <strong>Settings &gt; Bluetooth &amp; devices</strong> – the toggle should be On.</p></li>
 <li><p>In <code>settings.json</code>, heart rate is already enabled:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode json code-with-copy"><code class="sourceCode json"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="er">"heart_rate":</span> <span class="fu">{</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"enabled"</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"device_address"</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"ecg_enabled"</span><span class="fu">:</span> <span class="kw">false</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p>With <code>device_address</code> set to <code>null</code>, the software will automatically scan for any nearby Polar H10. If you have multiple Polar H10 straps nearby and need to target a specific one, set <code>device_address</code> to its BLE MAC address (e.g.&nbsp;<code>"A0:9E:1A:XX:XX:XX"</code>).</p></li>
-<li><p><strong>Grant Bluetooth access</strong>: macOS may prompt your terminal app for Bluetooth permission on first run. Accept this.</p></li>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode json code-with-copy"><code class="sourceCode json"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="er">"heart_rate":</span> <span class="fu">{</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"enabled"</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"device_address"</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">"ecg_enabled"</span><span class="fu">:</span> <span class="kw">false</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>With <code>device_address</code> set to <code>null</code>, the software will automatically scan for any nearby Polar H10. If you have multiple Polar H10 straps nearby and need to target a specific one, set <code>device_address</code> to its BLE address (e.g.&nbsp;<code>"A0:9E:1A:XX:XX:XX"</code>).</p></li>
+<li><p><strong>Close other Bluetooth apps</strong>: Make sure no other app (Polar Beat, Polar Flow, etc.) is currently connected to the strap. BLE only allows one active connection at a time.</p></li>
 </ol>
+</section>
+<section id="windows-specific-notes-1" class="level3">
+<h3 class="anchored" data-anchor-id="windows-specific-notes-1">Windows-Specific Notes</h3>
+<ul>
+<li>The <code>bleak</code> library uses the Windows Bluetooth stack directly. No special drivers or pairing steps are needed.</li>
+<li>If BLE scanning fails, ensure your Bluetooth adapter supports BLE 4.0+. Check <strong>Device Manager &gt; Bluetooth</strong> for adapter details.</li>
+<li>Some antivirus software can block BLE scanning. If the Polar H10 is not found, try temporarily disabling real-time protection.</li>
+<li>If using a USB Bluetooth adapter (rather than built-in), ensure its drivers are installed and it appears in Device Manager.</li>
+</ul>
 </section>
 <section id="optional-enable-ecg" class="level3">
 <h3 class="anchored" data-anchor-id="optional-enable-ecg">Optional: Enable ECG</h3>
@@ -197,7 +332,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="verify-everything-with-calibration-mode" class="level2">
 <h2 class="anchored" data-anchor-id="verify-everything-with-calibration-mode">5. Verify Everything with Calibration Mode</h2>
 <p>Before running an experiment, use the built-in calibration check to confirm all devices are connected and working:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb8"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> main.py <span class="at">--calibrate</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> main.py <span class="at">--calibrate</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>This will:</p>
 <ol type="1">
 <li><strong>Test each USB webcam</strong> – opens the device, captures a test frame, and reports the resolution</li>
@@ -227,41 +362,15 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   Results: 5/5 passed
   Overall: PASS - All devices ready
 ============================================================</code></pre>
-<p>If any device shows <strong>FAIL</strong>, check:</p>
-<table class="caption-top table">
-<colgroup>
-<col style="width: 50%">
-<col style="width: 50%">
-</colgroup>
-<thead>
-<tr class="header">
-<th>Device</th>
-<th>Common issues</th>
-</tr>
-</thead>
-<tbody>
-<tr class="odd">
-<td>USB webcam</td>
-<td>Wrong device index, camera not plugged in, macOS camera permission denied</td>
-</tr>
-<tr class="even">
-<td>GoPro</td>
-<td>WiFi adapter not connected to GoPro’s network, GoPro powered off or asleep, wrong interface name in config</td>
-</tr>
-<tr class="odd">
-<td>Polar H10</td>
-<td>Strap not worn / electrodes dry, Bluetooth off, macOS Bluetooth permission denied, another app connected to the strap</td>
-</tr>
-</tbody>
-</table>
+<p>If any device shows <strong>FAIL</strong>, check the troubleshooting table below.</p>
 <hr>
 </section>
 <section id="run-an-experiment" class="level2">
 <h2 class="anchored" data-anchor-id="run-an-experiment">6. Run an Experiment</h2>
 <p>Once calibration passes, run:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb10"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> main.py</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb14"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> main.py</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Or with a custom config file:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb11"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> main.py <span class="at">--config</span> my_settings.json</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb15"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> main.py <span class="at">--config</span> my_settings.json</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>The experiment runs through three phases:</p>
 <ol type="1">
 <li><strong>Calibration</strong> (10s) – GoPros connect, webcams capture frames, HR recording begins</li>
@@ -274,11 +383,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="post-processing-gopro-lens-correction" class="level2">
 <h2 class="anchored" data-anchor-id="post-processing-gopro-lens-correction">7. Post-Processing: GoPro Lens Correction</h2>
 <p>GoPro footage is saved to the cameras’ SD cards. After downloading the video files, you can apply barrel distortion correction:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb12"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Process all .mp4 files in a directory</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> main.py <span class="at">--undistort</span> /path/to/gopro/videos/</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Process a single file</span></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> main.py <span class="at">--undistort</span> /path/to/clip.mp4</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb16"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Process all .mp4 files in a directory</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> main.py <span class="at">--undistort</span> /path/to/gopro/videos/</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Process a single file</span></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> main.py <span class="at">--undistort</span> /path/to/clip.mp4</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>On Windows, use backslashes or forward slashes:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb17"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> main.py <span class="at">--undistort</span> C:<span class="dt">\U</span>sers<span class="dt">\Y</span>ourName<span class="dt">\V</span>ideos<span class="dt">\g</span>opro<span class="dt">\</span></span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>python main.py <span class="at">--undistort</span> C:/Users/YourName/Videos/gopro/</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <p>Output files are saved alongside originals with an <code>_undistorted</code> suffix.</p>
 <hr>
 </section>
@@ -306,10 +418,134 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </section>
 <section id="troubleshooting" class="level2">
 <h2 class="anchored" data-anchor-id="troubleshooting">Troubleshooting</h2>
-<p><strong>Webcam shows black frames or wrong resolution</strong>: Some webcams need a moment to adjust exposure. The first few frames may be dark. If resolution doesn’t match, check the webcam supports 1920x1080 – lower the <code>resolution</code> in <code>settings.json</code> if needed (e.g.&nbsp;<code>[1280, 720]</code>).</p>
-<p><strong>GoPro disconnects during experiment</strong>: GoPros drop WiFi if they don’t receive periodic keep-alive signals. The software sends these automatically every 2.5 seconds. If disconnects happen, check the WiFi adapter signal strength and move the adapters closer to the cameras.</p>
-<p><strong>Polar H10 not found</strong>: Make sure the strap is on your body with moistened electrodes. The H10 only broadcasts a BLE signal when it detects skin contact. Also ensure no other app (e.g.&nbsp;Polar Beat, Polar Flow) is currently connected to the strap, as BLE only allows one connection.</p>
-<p><strong>macOS permission prompts</strong>: The first time you run CaptureExpert, macOS may ask for Camera and Bluetooth access for your terminal. Grant both. If you accidentally denied, go to <strong>System Settings &gt; Privacy &amp; Security</strong> and add your terminal app manually.</p>
+<section id="usb-webcams" class="level3">
+<h3 class="anchored" data-anchor-id="usb-webcams">USB Webcams</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Problem</th>
+<th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Camera not detected</td>
+<td>Check <strong>Device Manager &gt; Cameras</strong> – the webcam should be listed. Try a different USB port. Avoid USB hubs.</td>
+</tr>
+<tr class="even">
+<td>Black frames or wrong resolution</td>
+<td>Some webcams need a moment to adjust exposure. The first few frames may be dark. If resolution doesn’t match, check the webcam supports 1920x1080 – lower <code>resolution</code> in <code>settings.json</code> if needed (e.g.&nbsp;<code>[1280, 720]</code>).</td>
+</tr>
+<tr class="odd">
+<td><code>cv2.VideoCapture</code> fails silently</td>
+<td>On Windows, the code uses the DirectShow backend (<code>CAP_DSHOW</code>). If issues persist, try updating the webcam drivers from the Logitech website.</td>
+</tr>
+<tr class="even">
+<td>Wrong camera on wrong index</td>
+<td>Swap <code>device_index</code> values in <code>settings.json</code>, or unplug both cameras and plug them in one at a time to identify which gets index 0 vs 1.</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="gopro-cameras" class="level3">
+<h3 class="anchored" data-anchor-id="gopro-cameras">GoPro Cameras</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Problem</th>
+<th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Can’t connect to GoPro WiFi</td>
+<td>Ensure the GoPro’s WiFi is enabled and broadcasting. The WiFi LED should be blinking. Check that the USB WiFi adapter is working in Device Manager.</td>
+</tr>
+<tr class="even">
+<td>WiFi adapter not connecting</td>
+<td>Run <code>netsh wlan show interfaces</code> to verify the adapter is detected. Try connecting via Windows Settings manually first.</td>
+</tr>
+<tr class="odd">
+<td>Only one GoPro connects</td>
+<td>Both GoPros use IP <code>10.5.5.9</code>. Ensure route metrics are configured differently for each WiFi adapter (see Section 3.5).</td>
+</tr>
+<tr class="even">
+<td>GoPro disconnects during experiment</td>
+<td>GoPros drop WiFi if they don’t receive periodic keep-alive signals. The software sends these automatically every 2.5 seconds. Check WiFi adapter signal strength and move adapters closer to the cameras.</td>
+</tr>
+<tr class="odd">
+<td><code>goprocam</code> connection timeout</td>
+<td>Verify the WiFi adapter is connected to the GoPro’s network by pinging: <code>ping 10.5.5.9</code>. If no response, reconnect the WiFi adapter to the GoPro network.</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="polar-h10" class="level3">
+<h3 class="anchored" data-anchor-id="polar-h10">Polar H10</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Problem</th>
+<th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Not found during scan</td>
+<td>Make sure the strap is on your body with moistened electrodes. The H10 only broadcasts BLE when it detects skin contact. Also ensure no other app is connected to the strap.</td>
+</tr>
+<tr class="even">
+<td>Bluetooth permission error</td>
+<td>Ensure Bluetooth is enabled in <strong>Settings &gt; Bluetooth &amp; devices</strong>. Some antivirus software blocks BLE – try disabling real-time protection temporarily.</td>
+</tr>
+<tr class="odd">
+<td>Connection drops</td>
+<td>Ensure the PC’s Bluetooth adapter supports BLE 4.0+. Stay within Bluetooth range (~10m). Avoid interference from other Bluetooth devices.</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="general" class="level3">
+<h3 class="anchored" data-anchor-id="general">General</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Problem</th>
+<th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>ModuleNotFoundError</code> on import</td>
+<td>Run <code>pip install -r requirements.txt</code> to install all dependencies.</td>
+</tr>
+<tr class="even">
+<td>Permission errors writing output</td>
+<td>Ensure the <code>output/</code> directory path in <code>settings.json</code> is writable. Use an absolute path if the default <code>./output</code> causes issues.</td>
+</tr>
+<tr class="odd">
+<td>Ctrl+C doesn’t stop cleanly</td>
+<td>On Windows, Ctrl+C in the terminal should trigger KeyboardInterrupt. If the process hangs, use Ctrl+Break or close the terminal window. The teardown handler will attempt to disconnect all devices.</td>
+</tr>
+</tbody>
+</table>
+</section>
 </section>
 </section>
 

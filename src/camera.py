@@ -1,5 +1,6 @@
 """Camera interface for USB webcams connected via USB."""
 
+import sys
 from dataclasses import dataclass
 from typing import Optional
 
@@ -26,7 +27,11 @@ class Camera:
         """Initialize USB camera connection."""
         print(f"Opening camera: {self.config.name} (device {self.config.device_index})")
 
-        self._capture = cv2.VideoCapture(self.config.device_index)
+        # Use DirectShow backend on Windows for reliable USB camera access
+        if sys.platform == "win32":
+            self._capture = cv2.VideoCapture(self.config.device_index, cv2.CAP_DSHOW)
+        else:
+            self._capture = cv2.VideoCapture(self.config.device_index)
 
         if not self._capture.isOpened():
             print(f"Failed to open camera: {self.config.name}")

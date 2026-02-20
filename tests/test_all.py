@@ -7,6 +7,7 @@ import csv
 import json
 import os
 import re
+import sys
 import threading
 import time
 from pathlib import Path
@@ -176,7 +177,10 @@ class TestCamera:
 
         camera = self._make_camera()
         assert camera.open() is True
-        mock_cv2.VideoCapture.assert_called_with(0)
+        if sys.platform == "win32":
+            mock_cv2.VideoCapture.assert_called_with(0, mock_cv2.CAP_DSHOW)
+        else:
+            mock_cv2.VideoCapture.assert_called_with(0)
         assert camera.is_open is True
 
         camera.close()
@@ -599,8 +603,10 @@ class TestUndistortVideo:
         # Should have opened exactly 2 videos (clip1.mp4 and clip2.MP4, not photo.jpg)
         assert mock_cv2.VideoCapture.call_count == 2
         call_args_list = [c[0][0] for c in mock_cv2.VideoCapture.call_args_list]
-        assert "/videos/clip1.mp4" in call_args_list
-        assert "/videos/clip2.MP4" in call_args_list
+        # Normalize path separators for cross-platform compatibility
+        call_args_normalized = [p.replace("\\", "/") for p in call_args_list]
+        assert "/videos/clip1.mp4" in call_args_normalized
+        assert "/videos/clip2.MP4" in call_args_normalized
 
 
 # ============================================================
