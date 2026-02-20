@@ -414,6 +414,18 @@ class IrisApp(ctk.CTk):
         self._progress_bar.pack(fill="x", pady=(5, 0))
         self._progress_bar.set(0)
 
+        # Continue button (hidden by default, shown when experiment waits for user)
+        self._continue_btn = ctk.CTkButton(
+            prog_f,
+            text="Continue",
+            font=FONT_BODY,
+            fg_color=CLR_BLUE,
+            hover_color=CLR_BLUE_H,
+            height=42,
+            command=self._on_continue,
+        )
+        # Not packed initially — shown/hidden dynamically
+
         # Video player panel (hidden by default, spans both columns)
         self._build_video_player_panel(parent)
 
@@ -1082,8 +1094,22 @@ class IrisApp(ctk.CTk):
             self._user_action_queue.put({"type": "pause"})
 
     def _vp_continue(self):
-        """User clicked Continue (advance to next phase)."""
+        """User clicked Continue in video player (advance to next phase)."""
         self._user_action_queue.put({"type": "continue"})
+        self._hide_continue_btn()
+
+    def _on_continue(self):
+        """User clicked the main Continue button (advance to next phase)."""
+        self._user_action_queue.put({"type": "continue"})
+        self._hide_continue_btn()
+
+    def _show_continue_btn(self):
+        """Show the main Continue button in the progress section."""
+        self._continue_btn.pack(fill="x", pady=(10, 0))
+
+    def _hide_continue_btn(self):
+        """Hide the main Continue button."""
+        self._continue_btn.pack_forget()
 
     def _update_video_frame(self, frame):
         """Display a video frame in the player canvas."""
@@ -1371,6 +1397,7 @@ class IrisApp(ctk.CTk):
             self._run_cal_btn.configure(state=state_on)
             self._stop_btn.configure(state=state_off)
             self._status_label.configure(text="Ready", text_color="white")
+            self._hide_continue_btn()
 
     # ==========================================================================
     #  GUI Event Polling (experiment -> GUI)
@@ -1398,6 +1425,7 @@ class IrisApp(ctk.CTk):
                 text=f"Phase {idx + 1}/{total}: {name}"
             )
             self._progress_bar.set((idx + 1) / total if total > 0 else 0)
+            self._hide_continue_btn()
 
         elif etype == "show_video_player":
             self._show_video_player(
@@ -1427,6 +1455,7 @@ class IrisApp(ctk.CTk):
         elif etype == "wait_for_continue":
             msg = event.get("message", "Press Continue to proceed.")
             self._progress_label.configure(text=msg)
+            self._show_continue_btn()
 
         elif etype == "recording_status":
             if event.get("recording"):
@@ -1443,9 +1472,11 @@ class IrisApp(ctk.CTk):
             self._progress_label.configure(text=msg)
             # Switch to calibration tab to allow file selection
             self.tabview.set("Calibration")
+            self._show_continue_btn()
 
         elif etype == "experiment_complete":
             self._progress_label.configure(text="Experiment complete!")
+            self._hide_continue_btn()
             self._hide_video_player()
 
     # ==========================================================================
