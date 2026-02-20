@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""CaptureExpert - Desktop GUI Application.
+"""Iris - Desktop GUI Application.
 
 Run directly:    python gui.py
-From launcher:   double-click CaptureExpert.pyw
+From launcher:   double-click Iris.pyw
 """
 
 import ctypes
@@ -35,7 +35,7 @@ except ImportError:
 
 # --- Constants ----------------------------------------------------------------
 
-APP_TITLE = "CaptureExpert"
+APP_TITLE = "Iris"
 DEFAULT_CONFIG = "settings.json"
 WINDOW_SIZE = "1200x850"
 MIN_SIZE = (1000, 700)
@@ -85,7 +85,7 @@ class OutputRedirector:
 # --- Application --------------------------------------------------------------
 
 
-class CaptureExpertApp(ctk.CTk):
+class IrisApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
@@ -1551,5 +1551,5 @@ class CaptureExpertApp(ctk.CTk):
 # --- Entry Point --------------------------------------------------------------
 
 if __name__ == "__main__":
-    app = CaptureExpertApp()
+    app = IrisApp()
     app.mainloop()

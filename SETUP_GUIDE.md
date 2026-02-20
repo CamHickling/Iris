@@ -1,4 +1,4 @@
-# CaptureExpert Setup Guide
+# Iris Setup Guide
 
 This guide walks through connecting all hardware devices and verifying they work before running an experiment. The primary target platform is **Windows 11**, with macOS notes included where relevant.
 

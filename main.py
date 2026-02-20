@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CaptureExpert - Multi-camera experiment capture tool."""
+"""Iris - Multi-camera experiment capture tool."""
 
 import argparse
 import json
@@ -15,7 +15,7 @@ def load_settings(config_path: str) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="CaptureExpert")
+    parser = argparse.ArgumentParser(description="Iris")
     parser.add_argument(
         "--config",
         default="settings.json",

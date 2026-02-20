@@ -1,15 +1,15 @@
-# CaptureExpert
+# Iris
 
 Multi-camera experiment capture tool with phase-based workflows.
 
 ## Overview
 
-CaptureExpert manages multi-phase experiments involving synchronized capture from multiple cameras. Each experiment progresses through configurable phases (calibration, warmup, capture, review, etc.).
+Iris manages multi-phase experiments involving synchronized capture from multiple cameras. Each experiment progresses through configurable phases (calibration, warmup, capture, review, etc.).
 
 ## Structure
 
 ```
-CaptureExpert/
+Iris/
 ├── main.py              # Entry point
 ├── settings.json        # Configuration file
 ├── src/
