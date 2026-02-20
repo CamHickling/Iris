@@ -464,7 +464,7 @@ class Experiment:
         player.on_frame = on_frame
 
         self._send_gui_event("show_video_player", allow_pause=False,
-                             message="Scoring: Watch video. Face camera is recording.")
+                             message="Scoring: Press Start to begin. Face camera is recording.")
 
         video_finished = False
 
@@ -473,9 +473,21 @@ class Experiment:
             video_finished = True
 
         player.on_complete = mark_complete
-        player.play()
 
-        print("Scoring phase started...")
+        # Wait for user to press Start (GUI handles countdown, then sends "play")
+        print("Scoring phase: Waiting for user to start...")
+        while True:
+            try:
+                action = self._user_action_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            if action.get("type") == "stop":
+                raise KeyboardInterrupt("User stopped experiment")
+            if action.get("type") == "play":
+                player.play()
+                break
+
+        print("Scoring video playing...")
         while not video_finished:
             try:
                 action = self._user_action_queue.get(timeout=0.5)

@@ -37,8 +37,8 @@ except ImportError:
 
 APP_TITLE = "Iris"
 DEFAULT_CONFIG = "settings.json"
-WINDOW_SIZE = "1200x850"
-MIN_SIZE = (1000, 700)
+WINDOW_SIZE = "1400x950"
+MIN_SIZE = (1200, 800)
 
 FONT_HEADER = ("Segoe UI", 18, "bold")
 FONT_SUB = ("Segoe UI", 14, "bold")
@@ -60,8 +60,10 @@ CLR_PURPLE_H = "#8e44ad"
 GOPRO_MODELS = ["hero7_silver", "hero5_session"]
 CAMERA_ROLES = ["overhead", "face", ""]
 
-VIDEO_DISPLAY_WIDTH = 640
-VIDEO_DISPLAY_HEIGHT = 360
+VIDEO_DISPLAY_WIDTH = 960
+VIDEO_DISPLAY_HEIGHT = 540
+
+FONT_COUNTDOWN = ("Segoe UI", 120, "bold")
 
 
 # --- Stdout Redirector --------------------------------------------------------
@@ -126,6 +128,9 @@ class IrisApp(ctk.CTk):
         # Video player state
         self._video_player_visible = False
         self._video_allow_pause = False
+        self._video_first_play = True
+        self._video_playing = False
+        self._countdown_active = False
 
         self._load_settings()
         self._build_ui()
@@ -1073,25 +1078,93 @@ class IrisApp(ctk.CTk):
         """Show the video player panel in the experiment tab."""
         self._video_player_visible = True
         self._video_allow_pause = allow_pause
+        self._video_first_play = True
+        self._video_playing = False
+        self._countdown_active = False
         self._vp_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
         self._vp_message.configure(text=message)
+        self._vp_canvas.configure(text="Press Play to begin", font=FONT_BODY)
+        # Configure buttons for mode
+        self._vp_play_btn.configure(
+            text="Start" if not allow_pause else "Play",
+            state="normal",
+        )
         self._vp_pause_btn.configure(state="normal" if allow_pause else "disabled")
-        self._vp_recording_label.configure(text="REC" if allow_pause else "")
+        self._vp_recording_label.configure(text="")
+        # Bind spacebar for play/pause toggle
+        self.bind("<space>", self._vp_space_handler)
 
     def _hide_video_player(self):
         """Hide the video player panel."""
         self._video_player_visible = False
+        self._video_first_play = True
+        self._video_playing = False
+        self._countdown_active = False
         self._vp_frame.grid_forget()
-        self._vp_canvas.configure(text="No video", image=None)
+        self._vp_canvas.configure(text="No video", image=None, font=FONT_BODY)
+        self.unbind("<space>")
 
     def _vp_play(self):
-        """User clicked Play."""
-        self._user_action_queue.put({"type": "play"})
+        """User clicked Play (or Start in scoring mode)."""
+        if self._countdown_active:
+            return
+        if self._video_first_play:
+            # First play: run 3-2-1 countdown before starting
+            self._video_first_play = False
+            self._countdown_active = True
+            self._vp_play_btn.configure(state="disabled")
+            self._vp_pause_btn.configure(state="disabled")
+            self._run_countdown(3)
+        else:
+            self._user_action_queue.put({"type": "play"})
+            self._video_playing = True
+            self._vp_play_btn.configure(state="disabled")
+            self._vp_pause_btn.configure(state="normal")
 
     def _vp_pause(self):
         """User clicked Pause."""
-        if self._video_allow_pause:
+        if self._video_allow_pause and self._video_playing:
             self._user_action_queue.put({"type": "pause"})
+            self._video_playing = False
+            self._vp_play_btn.configure(state="normal")
+            self._vp_pause_btn.configure(state="disabled")
+
+    def _vp_space_handler(self, event=None):
+        """Spacebar toggles play/pause when video player is visible."""
+        if not self._video_player_visible or self._countdown_active:
+            return
+        # Ignore spacebar when focus is in a text entry widget
+        focused = self.focus_get()
+        if isinstance(focused, (ctk.CTkEntry, ctk.CTkTextbox)):
+            return
+        if self._video_first_play:
+            self._vp_play()
+        elif self._video_allow_pause:
+            if self._video_playing:
+                self._vp_pause()
+            else:
+                self._vp_play()
+
+    def _run_countdown(self, count):
+        """Show 3-2-1 countdown on the video canvas, then start playback."""
+        if count > 0:
+            self._vp_canvas.configure(
+                text=str(count), image=None, font=FONT_COUNTDOWN,
+            )
+            self.after(1000, lambda: self._run_countdown(count - 1))
+        else:
+            # Countdown finished — start video
+            self._vp_canvas.configure(text="", font=FONT_BODY)
+            self._countdown_active = False
+            self._video_playing = True
+            self._user_action_queue.put({"type": "play"})
+            if self._video_allow_pause:
+                self._vp_play_btn.configure(state="disabled")
+                self._vp_pause_btn.configure(state="normal")
+            else:
+                # Scoring mode: no controls once started
+                self._vp_play_btn.configure(state="disabled")
+                self._vp_pause_btn.configure(state="disabled")
 
     def _vp_continue(self):
         """User clicked Continue in video player (advance to next phase)."""
@@ -1450,7 +1523,10 @@ class IrisApp(ctk.CTk):
             self._update_video_time(pos, dur)
 
         elif etype == "video_complete":
-            self._vp_canvas.configure(text="Video complete")
+            self._vp_canvas.configure(text="Video complete", font=FONT_BODY)
+            self._video_playing = False
+            self._vp_play_btn.configure(state="disabled")
+            self._vp_pause_btn.configure(state="disabled")
 
         elif etype == "wait_for_continue":
             msg = event.get("message", "Press Continue to proceed.")

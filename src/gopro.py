@@ -34,7 +34,6 @@ def get_interface_ip(interface_name: str) -> Optional[str]:
         )
         for line in result.stdout.splitlines():
             stripped = line.strip()
-            # Match lines like "IP Address:  10.5.5.103"
             if "IP Address" in stripped or "IP address" in stripped:
                 ip = stripped.rsplit(":", 1)[-1].strip()
                 if ip.startswith("10.5.5."):
@@ -58,6 +57,58 @@ def get_interface_ip(interface_name: str) -> Optional[str]:
                 found_interface = False
     except Exception:
         pass
+    return None
+
+
+def ensure_interface_ip(interface_name: str, static_ip: str,
+                        max_wait: float = 10.0) -> Optional[str]:
+    """Wait for DHCP to assign a 10.5.5.x IP, or set a static IP as fallback.
+
+    Args:
+        interface_name: Windows WiFi interface name (e.g. "WiFi 4")
+        static_ip: Static IP to assign if DHCP fails (e.g. "10.5.5.101")
+        max_wait: Seconds to wait for DHCP before falling back to static
+
+    Returns:
+        The 10.5.5.x IP address, or None if all attempts fail.
+    """
+    # First check if we already have a valid IP
+    ip = get_interface_ip(interface_name)
+    if ip:
+        return ip
+
+    # Wait for DHCP
+    print(f"  Waiting for DHCP on {interface_name}...")
+    deadline = time.time() + max_wait
+    while time.time() < deadline:
+        time.sleep(1.0)
+        ip = get_interface_ip(interface_name)
+        if ip:
+            print(f"  DHCP assigned {ip} to {interface_name}")
+            return ip
+
+    # DHCP failed — assign static IP
+    print(f"  DHCP failed on {interface_name}, assigning static IP {static_ip}...")
+    try:
+        # Use elevated powershell to set the static IP
+        subprocess.run(
+            [
+                "powershell.exe", "-NoProfile", "-Command",
+                f'Start-Process netsh -ArgumentList '
+                f'"interface ip set address `"{interface_name}`" '
+                f'static {static_ip} 255.255.255.0 10.5.5.9" '
+                f'-Verb RunAs -Wait',
+            ],
+            capture_output=True, text=True, timeout=15,
+        )
+        time.sleep(2.0)
+        ip = get_interface_ip(interface_name)
+        if ip:
+            print(f"  Static IP {ip} set on {interface_name}")
+            return ip
+    except Exception as e:
+        print(f"  WARNING: Failed to set static IP: {e}")
+
     return None
 
 
@@ -113,11 +164,15 @@ class GoProCam:
     # urllib opener is active for each request.
     _api_lock = threading.Lock()
 
+    # Track assigned static IPs to avoid conflicts
+    _used_static_ips: list[str] = []
+
     def __init__(self, config: GoProConfig):
         self.config = config
         self._camera: Optional[GoProCamera.GoPro] = None
         self._connected = False
         self._opener: Optional[urllib.request.OpenerDirector] = None
+        self._source_ip: Optional[str] = None
 
     @property
     def is_connected(self) -> bool:
@@ -129,19 +184,33 @@ class GoProCam:
         if self._opener is not None:
             urllib.request.install_opener(self._opener)
 
+    def _next_static_ip(self) -> str:
+        """Pick the next available static IP in 10.5.5.0/24."""
+        for last_octet in range(100, 200):
+            candidate = f"10.5.5.{last_octet}"
+            if candidate not in GoProCam._used_static_ips:
+                GoProCam._used_static_ips.append(candidate)
+                return candidate
+        return "10.5.5.199"
+
     def connect(self) -> bool:
         """Connect to the GoPro camera via its WiFi network."""
         print(f"Connecting to GoPro: {self.config.name} ({self.config.model}) "
               f"on interface {self.config.wifi_interface}...")
 
-        # Find the local IP of the WiFi adapter for source-address binding
-        source_ip = get_interface_ip(self.config.wifi_interface)
+        # Ensure the WiFi adapter has a valid IP in the GoPro subnet
+        static_fallback = self._next_static_ip()
+        source_ip = ensure_interface_ip(
+            self.config.wifi_interface, static_fallback, max_wait=10.0,
+        )
+
         if source_ip:
             print(f"  Interface {self.config.wifi_interface} -> local IP {source_ip}")
+            self._source_ip = source_ip
             handler = _BoundHTTPHandler((source_ip, 0))
             self._opener = urllib.request.build_opener(handler)
         else:
-            print(f"  WARNING: Could not find IP for {self.config.wifi_interface}, "
+            print(f"  WARNING: Could not get IP for {self.config.wifi_interface}, "
                   f"using default routing")
 
         try:
@@ -223,13 +292,23 @@ class GoProCam:
             return None
 
     def keep_alive(self):
-        """Send keep-alive signal to prevent WiFi disconnect."""
-        if not self._connected or self._camera is None:
+        """Send keep-alive signal via a source-bound UDP socket.
+
+        The goprocam library's KeepAlive() uses an unbound socket, which would
+        route to whichever GoPro the OS picks. We send our own bound UDP packet
+        to ensure it reaches the correct camera.
+        """
+        if not self._connected:
             return
         try:
-            with GoProCam._api_lock:
-                self._install_opener()
-                self._camera.KeepAlive()
+            payload = "_GPHD_:0:0:2:0.000000\n".encode()
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                if self._source_ip:
+                    sock.bind((self._source_ip, 0))
+                sock.sendto(payload, (self.config.ip_address, 8554))
+            finally:
+                sock.close()
         except Exception:
             pass
 
@@ -255,6 +334,8 @@ class GoProManager:
     """
 
     def __init__(self, gopro_configs: list[dict]):
+        # Reset static IP tracker for fresh connections
+        GoProCam._used_static_ips.clear()
         self.cameras: dict[str, GoProCam] = {}
         for cfg in gopro_configs:
             if cfg.get("enabled", True):
