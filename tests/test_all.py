@@ -1,4 +1,4 @@
-"""Comprehensive unit tests for CaptureExpert.
+"""Comprehensive unit tests for Iris.
 
 All hardware dependencies (OpenCV, goprocam, bleak) are mocked.
 """

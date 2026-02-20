@@ -1,1 +1,1 @@
-# CaptureExpert source package
+# Iris source package

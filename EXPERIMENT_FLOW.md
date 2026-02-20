@@ -1,6 +1,6 @@
-# CaptureExpert - Experiment Flow
+# Iris - Experiment Flow
 
-This document describes the complete lifecycle of a CaptureExpert experiment, from launch to data output.
+This document describes the complete lifecycle of a Iris experiment, from launch to data output.
 
 ---
 
