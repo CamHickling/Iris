@@ -44,7 +44,7 @@ FONT_HEADER = ("Segoe UI", 18, "bold")
 FONT_SUB = ("Segoe UI", 14, "bold")
 FONT_BODY = ("Segoe UI", 12)
 FONT_SMALL = ("Segoe UI", 11)
-FONT_MONO = ("Consolas", 11)
+FONT_MONO = ("Consolas", 16)
 
 CLR_GREEN = "#2ecc71"
 CLR_GREEN_H = "#27ae60"
