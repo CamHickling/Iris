@@ -145,6 +145,28 @@ class TestPhase:
         phase = self._make_phase(capture_interval_ms=None)
         assert phase.should_capture is False
 
+    def test_phase_config_extended_fields(self):
+        from src.phase import PhaseConfig
+        config = PhaseConfig(
+            id="review", name="Review", duration_seconds=0,
+            capture_interval_ms=None, instructions="Review video",
+            record_video=True, record_audio=True, allow_pause=True,
+            cameras=["face"],
+        )
+        assert config.record_video is True
+        assert config.record_audio is True
+        assert config.allow_pause is True
+        assert config.cameras == ["face"]
+        assert config.record_gopro is False  # default
+
+    def test_phase_config_default_cameras(self):
+        from src.phase import PhaseConfig
+        config = PhaseConfig(
+            id="test", name="Test", duration_seconds=10,
+            capture_interval_ms=None, instructions="",
+        )
+        assert config.cameras == []
+
 
 # ============================================================
 # Module: src/camera.py
@@ -158,6 +180,22 @@ class TestCameraConfig:
             resolution=(1920, 1080), fps=30, enabled=True,
         )
         assert cfg.device_index == 2
+
+    def test_role_field(self):
+        from src.camera import CameraConfig
+        cfg = CameraConfig(
+            id="cam1", name="Cam 1", device_index=0,
+            resolution=(1920, 1080), fps=30, enabled=True, role="overhead",
+        )
+        assert cfg.role == "overhead"
+
+    def test_role_default_none(self):
+        from src.camera import CameraConfig
+        cfg = CameraConfig(
+            id="cam1", name="Cam 1", device_index=0,
+            resolution=(1920, 1080), fps=30, enabled=True,
+        )
+        assert cfg.role is None
 
 
 class TestCamera:
@@ -262,6 +300,24 @@ class TestCameraManager:
         frames = mgr.capture_all()
         assert "c1" in frames
         assert frames["c1"].shape == (480, 640, 3)
+
+    def test_get_camera_by_role(self):
+        from src.camera import CameraManager
+        configs = [
+            {"id": "c1", "name": "Overhead", "device_index": 0,
+             "resolution": [1920, 1080], "fps": 30, "enabled": True, "role": "overhead"},
+            {"id": "c2", "name": "Face", "device_index": 1,
+             "resolution": [1920, 1080], "fps": 30, "enabled": True, "role": "face"},
+        ]
+        mgr = CameraManager(configs)
+        overhead = mgr.get_camera_by_role("overhead")
+        assert overhead is not None
+        assert overhead.config.id == "c1"
+        face = mgr.get_camera_by_role("face")
+        assert face is not None
+        assert face.config.id == "c2"
+        missing = mgr.get_camera_by_role("side")
+        assert missing is None
 
 
 # ============================================================
@@ -619,32 +675,35 @@ class TestExperiment:
             "experiment": {
                 "name": "Test Experiment",
                 "output_dir": "/tmp/test_experiment",
+                "recording_format": "mp4",
             },
             "cameras": [],
             "gopros": [],
             "phases": [
                 {
-                    "id": "calibration",
-                    "name": "Calibration",
-                    "duration_seconds": 30,
-                    "capture_interval_ms": 1000,
-                    "instructions": "Stand still",
+                    "id": "setup",
+                    "name": "Setup",
+                    "duration_seconds": 0,
+                    "capture_interval_ms": None,
+                    "instructions": "Setting up",
                 },
                 {
-                    "id": "recording",
-                    "name": "Recording",
-                    "duration_seconds": 60,
-                    "capture_interval_ms": 500,
-                    "instructions": "Move around",
+                    "id": "heart_rate_start",
+                    "name": "Heart Rate Start",
+                    "duration_seconds": 0,
+                    "capture_interval_ms": None,
+                    "instructions": "Starting HR",
                 },
             ],
             "heart_rate": {"enabled": False},
+            "microphone": {"enabled": False},
         }
 
+    @patch("src.experiment.check_ffmpeg", return_value=True)
     @patch("src.experiment.PolarH10")
     @patch("src.experiment.GoProManager")
     @patch("src.experiment.CameraManager")
-    def test_experiment_setup(self, mock_cm, mock_gm, mock_hr):
+    def test_experiment_setup(self, mock_cm, mock_gm, mock_hr, mock_ffmpeg):
         from src.experiment import Experiment
         settings = self._make_settings()
         exp = Experiment(settings)
@@ -652,52 +711,153 @@ class TestExperiment:
         assert len(exp.phases) == 2
         assert exp.current_phase_index == 0
 
+    @patch("src.experiment.check_ffmpeg", return_value=True)
     @patch("src.experiment.PolarH10")
     @patch("src.experiment.GoProManager")
     @patch("src.experiment.CameraManager")
-    def test_experiment_phase_advancement(self, mock_cm, mock_gm, mock_hr):
+    def test_experiment_phase_advancement(self, mock_cm, mock_gm, mock_hr, mock_ffmpeg):
         from src.experiment import Experiment
         settings = self._make_settings()
         exp = Experiment(settings)
-        assert exp.current_phase.config.id == "calibration"
+        assert exp.current_phase.config.id == "setup"
         result = exp.next_phase()
         assert result is True
-        assert exp.current_phase.config.id == "recording"
+        assert exp.current_phase.config.id == "heart_rate_start"
         result = exp.next_phase()
         assert result is False
 
+    @patch("src.experiment.check_ffmpeg", return_value=True)
     @patch("src.experiment.PolarH10")
     @patch("src.experiment.GoProManager")
     @patch("src.experiment.CameraManager")
-    def test_load_phases(self, mock_cm, mock_gm, mock_hr):
+    def test_load_phases(self, mock_cm, mock_gm, mock_hr, mock_ffmpeg):
         from src.experiment import Experiment
         settings = self._make_settings()
         exp = Experiment(settings)
-        assert exp.phases[0].config.id == "calibration"
-        assert exp.phases[0].config.duration_seconds == 30
-        assert exp.phases[1].config.capture_interval_ms == 500
+        assert exp.phases[0].config.id == "setup"
+        assert exp.phases[0].config.duration_seconds == 0
+        assert exp.phases[1].config.id == "heart_rate_start"
 
-    @patch("src.experiment.cv2")
+    @patch("src.experiment.check_ffmpeg", return_value=True)
     @patch("src.experiment.PolarH10")
     @patch("src.experiment.GoProManager")
     @patch("src.experiment.CameraManager")
-    def test_save_frames(self, mock_cm, mock_gm, mock_hr, mock_cv2, tmp_path):
+    def test_experiment_mic_config(self, mock_cm, mock_gm, mock_hr, mock_ffmpeg):
         from src.experiment import Experiment
         settings = self._make_settings()
-        settings["experiment"]["output_dir"] = str(tmp_path / "output")
+        settings["microphone"] = {
+            "enabled": True,
+            "device_name": "TestMic",
+            "device_index": 5,
+            "sample_rate": 48000,
+            "channels": 2,
+        }
         exp = Experiment(settings)
+        assert exp.mic_enabled is True
+        assert exp.mic_config.device_name == "TestMic"
+        assert exp.mic_config.device_index == 5
+        assert exp.mic_config.sample_rate == 48000
+        assert exp.mic_config.channels == 2
 
-        # Set up a phase
-        phase = exp.phases[0]
-        phase.start()
-        phase.frame_count = 3
 
-        frames = {"cam1": np.zeros((100, 100, 3), dtype=np.uint8)}
-        exp._save_frames(frames, phase)
+# ============================================================
+# Module: src/audio.py
+# ============================================================
 
-        mock_cv2.imwrite.assert_called_once()
-        call_args = mock_cv2.imwrite.call_args
-        assert "cam1_000003.jpg" in call_args[0][0]
+class TestAudioConfig:
+    def test_audio_config_defaults(self):
+        from src.audio import AudioConfig
+        config = AudioConfig()
+        assert config.device_name == "Tonor"
+        assert config.device_index is None
+        assert config.sample_rate == 44100
+        assert config.channels == 1
+        assert config.enabled is True
+
+    def test_audio_config_custom(self):
+        from src.audio import AudioConfig
+        config = AudioConfig(
+            device_name="TestMic", device_index=3,
+            sample_rate=48000, channels=2, enabled=False,
+        )
+        assert config.device_name == "TestMic"
+        assert config.device_index == 3
+        assert config.sample_rate == 48000
+
+
+class TestAudioRecorder:
+    def test_recorder_initial_state(self):
+        from src.audio import AudioConfig, AudioRecorder
+        config = AudioConfig(device_index=0)
+        recorder = AudioRecorder(config)
+        assert recorder._recording is False
+        assert recorder._stream is None
+
+
+# ============================================================
+# Module: src/video_player.py
+# ============================================================
+
+class TestVideoPlayerState:
+    def test_player_state_enum(self):
+        from src.video_player import PlayerState
+        assert PlayerState.STOPPED.name == "STOPPED"
+        assert PlayerState.PLAYING.name == "PLAYING"
+        assert PlayerState.PAUSED.name == "PAUSED"
+
+    def test_player_initial_state(self):
+        from src.video_player import VideoPlayer, PlayerState
+        player = VideoPlayer("test.mp4")
+        assert player.state == PlayerState.STOPPED
+        assert player.progress == 0.0
+        assert player.position_sec == 0.0
+
+
+# ============================================================
+# Module: src/video_recorder.py
+# ============================================================
+
+class TestVideoRecorder:
+    def test_recorder_initial_state(self):
+        from src.video_recorder import VideoRecorder
+        mock_camera = MagicMock()
+        mock_camera.config.resolution = (1920, 1080)
+        mock_camera.is_open = False
+        recorder = VideoRecorder(mock_camera, "test.mp4", fps=30)
+        assert recorder.frame_count == 0
+        assert recorder.last_frame is None
+
+    def test_recorder_start_fails_when_camera_not_open(self):
+        from src.video_recorder import VideoRecorder
+        mock_camera = MagicMock()
+        mock_camera.is_open = False
+        recorder = VideoRecorder(mock_camera, "test.mp4")
+        assert recorder.start() is False
+
+
+class TestPausableVideoRecorder:
+    def test_pause_resume(self):
+        from src.video_recorder import PausableVideoRecorder
+        mock_camera = MagicMock()
+        mock_camera.is_open = False
+        recorder = PausableVideoRecorder(mock_camera, "test.mp4")
+        assert recorder.is_paused is False
+        recorder.pause()
+        assert recorder.is_paused is True
+        recorder.resume()
+        assert recorder.is_paused is False
+
+
+# ============================================================
+# Module: src/compositing.py
+# ============================================================
+
+class TestCompositing:
+    def test_check_ffmpeg(self):
+        from src.compositing import check_ffmpeg
+        # Just verify it returns a boolean without error
+        result = check_ffmpeg()
+        assert isinstance(result, bool)
 
 
 # ============================================================

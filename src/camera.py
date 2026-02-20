@@ -16,6 +16,7 @@ class CameraConfig:
     resolution: tuple[int, int]
     fps: int
     enabled: bool
+    role: Optional[str] = None
 
 
 class Camera:
@@ -85,6 +86,7 @@ class CameraManager:
                     resolution=tuple(cfg["resolution"]),
                     fps=cfg["fps"],
                     enabled=cfg["enabled"],
+                    role=cfg.get("role"),
                 )
                 self.cameras[config.id] = Camera(config)
 
@@ -109,3 +111,10 @@ class CameraManager:
             if frame is not None:
                 frames[cam_id] = frame
         return frames
+
+    def get_camera_by_role(self, role: str) -> Optional["Camera"]:
+        """Find the first camera with the given role."""
+        for camera in self.cameras.values():
+            if camera.config.role == role:
+                return camera
+        return None
