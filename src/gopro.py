@@ -313,11 +313,12 @@ class GoProCam:
             pass
 
     def disconnect(self):
-        """Power off and disconnect from the camera."""
+        """Stop any recording and disconnect from the camera."""
         if self._camera is not None:
+            # Always attempt to stop recording — don't rely on is_recording()
+            # which can fail silently over flaky WiFi
             try:
-                if self.is_recording():
-                    self.stop_recording()
+                self.stop_recording()
             except Exception:
                 pass
             self._connected = False

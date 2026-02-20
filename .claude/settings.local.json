@@ -34,7 +34,17 @@
       "Bash(ping:*)",
       "Bash(ipconfig:*)",
       "Bash(netsh wlan disconnect:*)",
-      "Bash(powershell.exe -NoProfile -Command 'Start-Process netsh -ArgumentList \"\"interface ip set address `\"\"WiFi 3`\"\" static 10.5.5.101 255.255.255.0 10.5.5.9\"\" -Verb RunAs -Wait')"
+      "Bash(powershell.exe -NoProfile -Command 'Start-Process netsh -ArgumentList \"\"interface ip set address `\"\"WiFi 3`\"\" static 10.5.5.101 255.255.255.0 10.5.5.9\"\" -Verb RunAs -Wait')",
+      "Bash(powershell.exe -NoProfile -Command 'Get-NetAdapter | Where-Object { $_.InterfaceDescription -like \"\"*D-Link*\"\" -or $_.InterfaceDescription -like \"\"*Intel*Wi-Fi*\"\" } | Format-List Name,InterfaceDescription,Status,MacAddress,ifIndex')",
+      "Bash(powershell.exe -NoProfile -Command 'Start-Process netsh -ArgumentList \"\"interface ip set address `\"\"WiFi 4`\"\" static 10.5.5.100 255.255.255.0 10.5.5.9\"\" -Verb RunAs -Wait')",
+      "Bash(powershell.exe -NoProfile -Command 'Start-Process netsh -ArgumentList \"\"interface ip set address `\"\"WiFi 5`\"\" static 10.5.5.101 255.255.255.0 10.5.5.9\"\" -Verb RunAs -Wait')",
+      "Bash(powershell.exe -NoProfile -Command 'Get-NetIPAddress -InterfaceAlias \"\"WiFi 4\"\" | Format-List IPAddress,PrefixLength,AddressFamily')",
+      "Bash(powershell.exe -NoProfile -Command 'Get-NetIPAddress -InterfaceAlias \"\"WiFi 4\"\" -AddressFamily IPv4 | Format-List IPAddress,PrefixLength')",
+      "Bash(powershell.exe -NoProfile -Command 'Start-Process cmd -ArgumentList \"\"/c netsh interface ip set address name=50 static 10.5.5.100 255.255.255.0 10.5.5.9\"\" -Verb RunAs -Wait')",
+      "Bash(powershell.exe -NoProfile -Command 'Start-Process netsh -ArgumentList \"\"interface ip set address `\"\"WiFi 5`\"\" static 10.5.5.100 255.255.255.0 10.5.5.9\"\" -Verb RunAs -Wait; Start-Process netsh -ArgumentList \"\"interface ip set address `\"\"WiFi 4`\"\" static 10.5.5.101 255.255.255.0 10.5.5.9\"\" -Verb RunAs -Wait')",
+      "Bash(powershell.exe -NoProfile -Command 'Start-Process netsh -ArgumentList \"\"interface ip set address `\"\"WiFi 5`\"\" static 10.5.5.100 255.255.255.0 10.5.5.9\"\" -Verb RunAs -Wait')",
+      "Bash(powershell.exe -NoProfile -Command 'Get-NetIPAddress -InterfaceIndex 32 -AddressFamily IPv4 | Format-List IPAddress,PrefixLength')",
+      "Bash(git push:*)"
     ]
   }
 }

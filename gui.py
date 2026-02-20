@@ -40,11 +40,12 @@ DEFAULT_CONFIG = "settings.json"
 WINDOW_SIZE = "1400x950"
 MIN_SIZE = (1200, 800)
 
-FONT_HEADER = ("Segoe UI", 18, "bold")
-FONT_SUB = ("Segoe UI", 14, "bold")
-FONT_BODY = ("Segoe UI", 12)
-FONT_SMALL = ("Segoe UI", 11)
-FONT_MONO = ("Consolas", 16)
+FONT_HEADER = ("Segoe UI", 26, "bold")
+FONT_SUB = ("Segoe UI", 20, "bold")
+FONT_BODY = ("Segoe UI", 16)
+FONT_SMALL = ("Segoe UI", 14)
+FONT_BTN = ("Segoe UI", 20, "bold")
+FONT_MONO = ("Consolas", 18)
 
 CLR_GREEN = "#2ecc71"
 CLR_GREEN_H = "#27ae60"
@@ -59,9 +60,6 @@ CLR_PURPLE_H = "#8e44ad"
 
 GOPRO_MODELS = ["hero7_silver", "hero5_session"]
 CAMERA_ROLES = ["overhead", "face", ""]
-
-VIDEO_DISPLAY_WIDTH = 960
-VIDEO_DISPLAY_HEIGHT = 540
 
 FONT_COUNTDOWN = ("Segoe UI", 120, "bold")
 
@@ -94,6 +92,7 @@ class IrisApp(ctk.CTk):
         self.title(APP_TITLE)
         self.geometry(WINDOW_SIZE)
         self.minsize(*MIN_SIZE)
+        self.attributes("-fullscreen", True)  # true fullscreen (no title bar/taskbar)
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
 
@@ -132,6 +131,19 @@ class IrisApp(ctk.CTk):
         self._video_playing = False
         self._countdown_active = False
 
+        # Console state
+        self._console_visible = True
+        self._console_frame = None
+
+        # Experiment tab reference (for row weight reconfiguration)
+        self._experiment_tab = None
+
+        # Calibration / GoPro mode state
+        self._calibration_done = False
+        self._gopro_mode = "auto"  # "auto" or "manual"
+        self._gopro_dialog_result = None
+        self._gopro_dialog_event = threading.Event()
+
         self._load_settings()
         self._build_ui()
         self._populate_ui()
@@ -139,6 +151,7 @@ class IrisApp(ctk.CTk):
         self._poll_gui_events()
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.bind("<Escape>", lambda e: self.attributes("-fullscreen", False))
 
     # ==========================================================================
     #  Settings I/O
@@ -309,18 +322,33 @@ class IrisApp(ctk.CTk):
         self._build_calibration_tab(self.tabview.add("Calibration"))
 
         # Settings bar
-        bar = ctk.CTkFrame(self, height=40)
-        bar.grid(row=1, column=0, padx=10, pady=4, sticky="ew")
+        bar = ctk.CTkFrame(self, height=50)
+        bar.grid(row=1, column=0, padx=10, pady=6, sticky="ew")
 
         ctk.CTkButton(
-            bar, text="Save Settings", width=130, command=self._save_settings
-        ).pack(side="left", padx=5, pady=5)
+            bar, text="Save Settings", width=150, height=38,
+            font=FONT_BODY, command=self._save_settings
+        ).pack(side="left", padx=8, pady=8)
         ctk.CTkButton(
-            bar, text="Load Settings", width=130, command=self._load_settings_dialog
-        ).pack(side="left", padx=5, pady=5)
+            bar, text="Load Settings", width=150, height=38,
+            font=FONT_BODY, command=self._load_settings_dialog
+        ).pack(side="left", padx=8, pady=8)
+
+        self._console_toggle_btn = ctk.CTkButton(
+            bar, text="Hide Console", width=150, height=38,
+            font=FONT_BODY, command=self._toggle_console
+        )
+        self._console_toggle_btn.pack(side="left", padx=8, pady=8)
 
         self._status_label = ctk.CTkLabel(bar, text="Ready", font=FONT_BODY)
-        self._status_label.pack(side="right", padx=15)
+        self._status_label.pack(side="right", padx=20)
+
+        # GoPro mode indicator (visible on all pages)
+        self._mode_indicator = ctk.CTkLabel(
+            bar, text="  NOT CALIBRATED  ", font=("Segoe UI", 14, "bold"),
+            text_color="gray", corner_radius=6,
+        )
+        self._mode_indicator.pack(side="right", padx=10)
 
         # Console
         self._build_console()
@@ -328,17 +356,18 @@ class IrisApp(ctk.CTk):
     # --- Experiment Tab ---
 
     def _build_experiment_tab(self, parent):
+        self._experiment_tab = parent
         parent.grid_columnconfigure(0, weight=1)
         parent.grid_columnconfigure(1, weight=1)
         parent.grid_rowconfigure(0, weight=1)
-        parent.grid_rowconfigure(1, weight=2)
+        parent.grid_rowconfigure(1, weight=0)
 
         # Left: settings
         left = ctk.CTkFrame(parent)
-        left.grid(row=0, column=0, padx=(0, 5), pady=5, sticky="nsew")
+        left.grid(row=0, column=0, padx=(0, 8), pady=8, sticky="nsew")
 
-        ctk.CTkLabel(left, text="Experiment Settings", font=FONT_SUB).pack(
-            anchor="w", padx=15, pady=(15, 10)
+        ctk.CTkLabel(left, text="Experiment Settings", font=FONT_HEADER).pack(
+            anchor="w", padx=25, pady=(25, 20)
         )
 
         self._exp_w["name"] = self._labeled_entry(left, "Name:", "Taekwondo Experiment")
@@ -347,76 +376,79 @@ class IrisApp(ctk.CTk):
         )
 
         row = ctk.CTkFrame(left, fg_color="transparent")
-        row.pack(fill="x", padx=15, pady=3)
-        ctk.CTkLabel(row, text="Rec. Format:", width=100, anchor="w").pack(side="left")
+        row.pack(fill="x", padx=25, pady=8)
+        ctk.CTkLabel(row, text="Rec. Format:", width=140, anchor="w", font=FONT_BODY).pack(side="left")
         fmt = ctk.StringVar(value="mp4")
-        ctk.CTkOptionMenu(row, variable=fmt, values=["mp4"], width=100).pack(
-            side="left"
-        )
+        ctk.CTkOptionMenu(row, variable=fmt, values=["mp4"], width=120,
+                          font=FONT_BODY, height=36).pack(side="left")
         self._exp_w["recording_format"] = fmt
 
         # Right: actions
         right = ctk.CTkFrame(parent)
-        right.grid(row=0, column=1, padx=(5, 0), pady=5, sticky="nsew")
+        right.grid(row=0, column=1, padx=(8, 0), pady=8, sticky="nsew")
 
-        ctk.CTkLabel(right, text="Actions", font=FONT_SUB).pack(
-            anchor="w", padx=15, pady=(15, 5)
+        ctk.CTkLabel(right, text="Actions", font=FONT_HEADER).pack(
+            anchor="w", padx=25, pady=(25, 10)
         )
 
         self._summary_label = ctk.CTkLabel(
-            right, text="", font=FONT_SMALL, justify="left", anchor="w"
+            right, text="", font=FONT_BODY, justify="left", anchor="w"
         )
-        self._summary_label.pack(anchor="w", padx=15, pady=(0, 10))
+        self._summary_label.pack(anchor="w", padx=25, pady=(0, 15))
 
         btn_f = ctk.CTkFrame(right, fg_color="transparent")
-        btn_f.pack(fill="x", padx=15, pady=0)
+        btn_f.pack(fill="x", padx=25, pady=0)
 
         self._run_btn = ctk.CTkButton(
             btn_f,
-            text="Run Experiment",
-            font=FONT_BODY,
+            text="Run Experiment (MUST CALIBRATE FIRST)",
+            font=FONT_BTN,
+            text_color="white",
             fg_color=CLR_GREEN,
             hover_color=CLR_GREEN_H,
-            height=45,
+            height=60,
             command=self._run_experiment,
+            state="disabled",
         )
-        self._run_btn.pack(fill="x", pady=4)
+        self._run_btn.pack(fill="x", pady=6)
 
         self._cal_btn = ctk.CTkButton(
             btn_f,
             text="Calibrate Devices",
-            font=FONT_BODY,
+            font=FONT_BTN,
+            text_color="white",
             fg_color=CLR_BLUE,
             hover_color=CLR_BLUE_H,
-            height=45,
+            height=60,
             command=self._run_calibrate,
         )
-        self._cal_btn.pack(fill="x", pady=4)
+        self._cal_btn.pack(fill="x", pady=6)
 
         self._stop_btn = ctk.CTkButton(
             btn_f,
             text="Stop",
-            font=FONT_BODY,
+            font=FONT_BTN,
+            text_color="white",
             fg_color=CLR_RED,
             hover_color=CLR_RED_H,
-            height=45,
+            height=60,
             command=self._stop_experiment,
             state="disabled",
         )
-        self._stop_btn.pack(fill="x", pady=4)
+        self._stop_btn.pack(fill="x", pady=6)
 
         # Progress section
         prog_f = ctk.CTkFrame(right, fg_color="transparent")
-        prog_f.pack(fill="x", padx=15, pady=(15, 5))
+        prog_f.pack(fill="x", padx=25, pady=(20, 10))
 
         self._phase_indicator = ctk.CTkLabel(prog_f, text="", font=FONT_BODY)
-        self._phase_indicator.pack(anchor="w")
+        self._phase_indicator.pack(anchor="w", pady=(0, 4))
 
-        self._progress_label = ctk.CTkLabel(prog_f, text="", font=FONT_SMALL)
-        self._progress_label.pack(anchor="w")
+        self._progress_label = ctk.CTkLabel(prog_f, text="", font=FONT_BODY)
+        self._progress_label.pack(anchor="w", pady=(0, 4))
 
-        self._progress_bar = ctk.CTkProgressBar(prog_f)
-        self._progress_bar.pack(fill="x", pady=(5, 0))
+        self._progress_bar = ctk.CTkProgressBar(prog_f, height=18)
+        self._progress_bar.pack(fill="x", pady=(8, 0))
         self._progress_bar.set(0)
 
         # Continue button (hidden by default, shown when experiment waits for user)
@@ -426,7 +458,7 @@ class IrisApp(ctk.CTk):
             font=FONT_BODY,
             fg_color=CLR_BLUE,
             hover_color=CLR_BLUE_H,
-            height=42,
+            height=55,
             command=self._on_continue,
         )
         # Not packed initially — shown/hidden dynamically
@@ -439,25 +471,24 @@ class IrisApp(ctk.CTk):
         self._vp_frame = ctk.CTkFrame(parent)
         # Not placed in grid initially - will be shown/hidden dynamically
 
-        ctk.CTkLabel(self._vp_frame, text="Video Player", font=FONT_SUB).pack(
-            anchor="w", padx=15, pady=(10, 5)
-        )
-
+        # Header row with title and message side by side
+        hdr = ctk.CTkFrame(self._vp_frame, fg_color="transparent")
+        hdr.pack(fill="x", padx=10, pady=(5, 0))
+        ctk.CTkLabel(hdr, text="Video Player", font=FONT_SUB).pack(side="left")
         self._vp_message = ctk.CTkLabel(
-            self._vp_frame, text="", font=FONT_SMALL, text_color="gray"
+            hdr, text="", font=FONT_SMALL, text_color="gray"
         )
-        self._vp_message.pack(anchor="w", padx=15)
+        self._vp_message.pack(side="left", padx=15)
 
-        # Video display area
+        # Video display area - expands to fill available space
         self._vp_canvas = ctk.CTkLabel(
-            self._vp_frame, text="No video", width=VIDEO_DISPLAY_WIDTH,
-            height=VIDEO_DISPLAY_HEIGHT, fg_color="#1a1a1a"
+            self._vp_frame, text="No video", fg_color="#1a1a1a"
         )
-        self._vp_canvas.pack(padx=15, pady=5)
+        self._vp_canvas.pack(fill="both", expand=True, padx=5, pady=5)
 
         # Controls row
         ctrl = ctk.CTkFrame(self._vp_frame, fg_color="transparent")
-        ctrl.pack(fill="x", padx=15, pady=(0, 5))
+        ctrl.pack(fill="x", padx=10, pady=(0, 5))
 
         self._vp_play_btn = ctk.CTkButton(
             ctrl, text="Play", width=80, height=32,
@@ -722,18 +753,30 @@ class IrisApp(ctk.CTk):
     # --- Console ---
 
     def _build_console(self):
-        frame = ctk.CTkFrame(self)
-        frame.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="nsew")
+        self._console_frame = ctk.CTkFrame(self)
+        self._console_frame.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="nsew")
 
-        hdr = ctk.CTkFrame(frame, fg_color="transparent", height=30)
-        hdr.pack(fill="x", padx=5, pady=(5, 0))
-        ctk.CTkLabel(hdr, text="Console Output", font=FONT_SMALL).pack(side="left")
+        hdr = ctk.CTkFrame(self._console_frame, fg_color="transparent", height=36)
+        hdr.pack(fill="x", padx=8, pady=(6, 0))
+        ctk.CTkLabel(hdr, text="Console Output", font=FONT_BODY).pack(side="left")
         ctk.CTkButton(
-            hdr, text="Clear", width=60, height=24, command=self._clear_console
+            hdr, text="Clear", width=80, height=30, font=FONT_SMALL,
+            command=self._clear_console
         ).pack(side="right")
 
-        self._console = ctk.CTkTextbox(frame, font=FONT_MONO, state="disabled")
-        self._console.pack(fill="both", expand=True, padx=5, pady=5)
+        self._console = ctk.CTkTextbox(self._console_frame, font=FONT_MONO, state="disabled")
+        self._console.pack(fill="both", expand=True, padx=8, pady=8)
+
+    def _toggle_console(self):
+        """Show or hide the console panel."""
+        if self._console_visible:
+            self._console_frame.grid_forget()
+            self._console_visible = False
+            self._console_toggle_btn.configure(text="Show Console")
+        else:
+            self._console_frame.grid(row=2, column=0, padx=10, pady=(0, 10), sticky="nsew")
+            self._console_visible = True
+            self._console_toggle_btn.configure(text="Hide Console")
 
     # ==========================================================================
     #  Populate UI from Settings
@@ -1081,6 +1124,18 @@ class IrisApp(ctk.CTk):
         self._video_first_play = True
         self._video_playing = False
         self._countdown_active = False
+
+        # Reconfigure experiment tab: shrink settings, expand video player
+        self._experiment_tab.grid_rowconfigure(0, weight=0)
+        self._experiment_tab.grid_rowconfigure(1, weight=1)
+
+        # Auto-hide console to maximize video space
+        if self._console_visible:
+            self._console_was_visible_before_video = True
+            self._toggle_console()
+        else:
+            self._console_was_visible_before_video = False
+
         self._vp_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
         self._vp_message.configure(text=message)
         self._vp_canvas.configure(text="Press Play to begin", font=FONT_BODY)
@@ -1103,6 +1158,14 @@ class IrisApp(ctk.CTk):
         self._vp_frame.grid_forget()
         self._vp_canvas.configure(text="No video", image=None, font=FONT_BODY)
         self.unbind("<space>")
+
+        # Restore experiment tab row weights
+        self._experiment_tab.grid_rowconfigure(0, weight=1)
+        self._experiment_tab.grid_rowconfigure(1, weight=0)
+
+        # Restore console if it was visible before video
+        if getattr(self, '_console_was_visible_before_video', False) and not self._console_visible:
+            self._toggle_console()
 
     def _vp_play(self):
         """User clicked Play (or Start in scoring mode)."""
@@ -1185,7 +1248,7 @@ class IrisApp(ctk.CTk):
         self._continue_btn.pack_forget()
 
     def _update_video_frame(self, frame):
-        """Display a video frame in the player canvas."""
+        """Display a video frame in the player canvas, scaled to fit."""
         if PILImage is None:
             return
         try:
@@ -1193,9 +1256,22 @@ class IrisApp(ctk.CTk):
             # BGR -> RGB
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img = PILImage.fromarray(rgb)
-            img = img.resize((VIDEO_DISPLAY_WIDTH, VIDEO_DISPLAY_HEIGHT), PILImage.LANCZOS)
+
+            # Get actual canvas dimensions
+            disp_w = self._vp_canvas.winfo_width()
+            disp_h = self._vp_canvas.winfo_height()
+            if disp_w < 50 or disp_h < 50:
+                disp_w, disp_h = 960, 540
+
+            # Maintain aspect ratio
+            src_h, src_w = frame.shape[:2]
+            scale = min(disp_w / src_w, disp_h / src_h)
+            new_w = max(1, int(src_w * scale))
+            new_h = max(1, int(src_h * scale))
+
+            img = img.resize((new_w, new_h), PILImage.LANCZOS)
             ctk_img = ctk.CTkImage(light_image=img, dark_image=img,
-                                   size=(VIDEO_DISPLAY_WIDTH, VIDEO_DISPLAY_HEIGHT))
+                                   size=(new_w, new_h))
             self._vp_canvas.configure(image=ctk_img, text="")
             self._vp_canvas._ctk_image = ctk_img  # prevent GC
         except Exception:
@@ -1213,6 +1289,10 @@ class IrisApp(ctk.CTk):
 
     def _run_experiment(self):
         if self._is_running:
+            return
+        if not self._calibration_done:
+            messagebox.showwarning("Calibrate First",
+                                   "Please run Calibrate Devices before starting the experiment.")
             return
         self._save_settings()
         self._clear_console()
@@ -1243,6 +1323,7 @@ class IrisApp(ctk.CTk):
                     self.settings,
                     gui_event_queue=self._gui_event_queue,
                     user_action_queue=self._user_action_queue,
+                    gopro_mode=self._gopro_mode,
                 )
                 self._active_experiment = exp
                 exp.run()
@@ -1279,10 +1360,64 @@ class IrisApp(ctk.CTk):
 
                 tool = CalibrationTool(self.settings)
                 passed = tool.run()
-                status = "All devices ready!" if passed else "Some devices failed."
+
+                if tool.gopro_failed():
+                    self.output_queue.put(("stdout", "\nGoPro connection failed."))
+                    # Ask user: retry or manual mode
+                    self._gopro_dialog_event.clear()
+                    self._gopro_dialog_result = None
+                    self.after(0, self._show_gopro_retry_dialog)
+                    self._gopro_dialog_event.wait()
+
+                    choice = self._gopro_dialog_result
+
+                    if choice == "retry":
+                        self.output_queue.put(("stdout", "\nRetrying GoPro connection..."))
+                        from src.gopro import GoProManager
+                        manager = GoProManager(self.settings.get("gopros", []))
+                        connect_done = threading.Event()
+                        connect_ok = [False]
+
+                        def try_connect():
+                            connect_ok[0] = manager.connect_all()
+                            connect_done.set()
+
+                        t = threading.Thread(target=try_connect, daemon=True)
+                        t.start()
+
+                        if connect_done.wait(timeout=30.0) and connect_ok[0]:
+                            self.output_queue.put(("stdout", "GoPro retry: SUCCESS"))
+                            self.after(0, lambda: self._set_gopro_mode("auto"))
+                        else:
+                            self.output_queue.put(("stdout",
+                                "GoPro retry failed. Switching to MANUAL mode.\n"
+                                "Please start/stop GoPros manually during the experiment."))
+                            self.after(0, lambda: self._set_gopro_mode("manual"))
+
+                        try:
+                            manager.disconnect_all()
+                        except Exception:
+                            pass
+                    else:
+                        # Manual mode chosen
+                        self.after(0, lambda: self._set_gopro_mode("manual"))
+                else:
+                    # GoPros passed (or none configured)
+                    has_gopros = any(g.get("enabled", True)
+                                    for g in self.settings.get("gopros", []))
+                    if has_gopros:
+                        self.after(0, lambda: self._set_gopro_mode("auto"))
+
+                status = "All devices ready!" if passed else "Calibration complete."
                 self.output_queue.put(("stdout", f"\nResult: {status}"))
+
+                # Enable Run Experiment
+                self.after(0, self._on_calibration_done)
+
             except Exception as e:
                 self.output_queue.put(("stderr", f"ERROR: {e}"))
+                import traceback
+                self.output_queue.put(("stderr", traceback.format_exc()))
             finally:
                 sys.stdout, sys.stderr = old_stdout, old_stderr
                 self.after(0, lambda: self._set_running(False))
@@ -1290,6 +1425,79 @@ class IrisApp(ctk.CTk):
 
         self._worker_thread = threading.Thread(target=worker, daemon=True)
         self._worker_thread.start()
+
+    def _show_gopro_retry_dialog(self):
+        """Show a dialog asking the user to retry GoPro connection or switch to manual mode."""
+        dialog = ctk.CTkToplevel(self)
+        dialog.title("GoPro Connection Failed")
+        dialog.geometry("550x280")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+
+        # Center the dialog on screen
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() - 550) // 2
+        y = (dialog.winfo_screenheight() - 280) // 2
+        dialog.geometry(f"550x280+{x}+{y}")
+
+        ctk.CTkLabel(
+            dialog, text="GoPro Connection Failed",
+            font=FONT_SUB,
+        ).pack(pady=(25, 10))
+
+        ctk.CTkLabel(
+            dialog,
+            text="One or more GoPro cameras failed to connect within 30 seconds.\n"
+                 "You can retry the connection, or switch to manual mode\n"
+                 "where you control the GoPros yourself.",
+            font=FONT_BODY, justify="center",
+        ).pack(pady=(0, 20))
+
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.pack(pady=10)
+
+        def on_retry():
+            self._gopro_dialog_result = "retry"
+            dialog.destroy()
+            self._gopro_dialog_event.set()
+
+        def on_manual():
+            self._gopro_dialog_result = "manual"
+            dialog.destroy()
+            self._gopro_dialog_event.set()
+
+        ctk.CTkButton(
+            btn_frame, text="Retry Connection", width=180, height=45,
+            font=FONT_BODY, fg_color=CLR_BLUE, hover_color=CLR_BLUE_H,
+            command=on_retry,
+        ).pack(side="left", padx=15)
+
+        ctk.CTkButton(
+            btn_frame, text="Manual Mode", width=180, height=45,
+            font=FONT_BODY, fg_color=CLR_ORANGE, hover_color=CLR_ORANGE_H,
+            command=on_manual,
+        ).pack(side="left", padx=15)
+
+        # If user closes the dialog window, default to manual
+        dialog.protocol("WM_DELETE_WINDOW", on_manual)
+
+    def _set_gopro_mode(self, mode):
+        """Update the GoPro mode and refresh the indicator on the settings bar."""
+        self._gopro_mode = mode
+        if mode == "auto":
+            self._mode_indicator.configure(
+                text="  GoPro: AUTO  ", text_color=CLR_GREEN,
+            )
+        else:
+            self._mode_indicator.configure(
+                text="  GoPro: MANUAL  ", text_color=CLR_ORANGE,
+            )
+
+    def _on_calibration_done(self):
+        """Enable Run Experiment after calibration has been run."""
+        self._calibration_done = True
+        self._run_btn.configure(text="Run Experiment", state="normal")
 
     def _run_undistort(self):
         if self._is_running:
@@ -1464,7 +1672,9 @@ class IrisApp(ctk.CTk):
             self._stop_btn.configure(state=state_on)
             self._status_label.configure(text="Running...", text_color=CLR_GREEN)
         else:
-            self._run_btn.configure(state=state_on)
+            # Only re-enable Run Experiment if calibration has been done
+            run_state = state_on if self._calibration_done else state_off
+            self._run_btn.configure(state=run_state)
             self._cal_btn.configure(state=state_on)
             self._undist_btn.configure(state=state_on)
             self._run_cal_btn.configure(state=state_on)
@@ -1588,10 +1798,10 @@ class IrisApp(ctk.CTk):
 
     def _labeled_entry(self, parent, label, default="", browse=None):
         row = ctk.CTkFrame(parent, fg_color="transparent")
-        row.pack(fill="x", padx=15, pady=3)
-        ctk.CTkLabel(row, text=label, width=100, anchor="w").pack(side="left")
-        entry = ctk.CTkEntry(row)
-        entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        row.pack(fill="x", padx=25, pady=8)
+        ctk.CTkLabel(row, text=label, width=140, anchor="w", font=FONT_BODY).pack(side="left")
+        entry = ctk.CTkEntry(row, font=FONT_BODY, height=36)
+        entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         if default:
             entry.insert(0, default)
 
@@ -1599,20 +1809,26 @@ class IrisApp(ctk.CTk):
             ctk.CTkButton(
                 row,
                 text="Browse",
-                width=70,
+                width=90,
+                height=36,
+                font=FONT_SMALL,
                 command=lambda: self._browse_dir(entry),
             ).pack(side="left")
         elif browse == "file_or_dir":
             ctk.CTkButton(
                 row,
                 text="File",
-                width=55,
+                width=70,
+                height=36,
+                font=FONT_SMALL,
                 command=lambda: self._browse_file(entry),
-            ).pack(side="left", padx=(0, 3))
+            ).pack(side="left", padx=(0, 4))
             ctk.CTkButton(
                 row,
                 text="Folder",
-                width=55,
+                width=70,
+                height=36,
+                font=FONT_SMALL,
                 command=lambda: self._browse_dir(entry),
             ).pack(side="left")
 

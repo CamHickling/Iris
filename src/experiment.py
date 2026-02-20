@@ -32,13 +32,20 @@ from .video_recorder import PausableVideoRecorder, VideoRecorder
 
 class Experiment:
     def __init__(self, settings: dict, gui_event_queue: Optional[queue.Queue] = None,
-                 user_action_queue: Optional[queue.Queue] = None):
+                 user_action_queue: Optional[queue.Queue] = None,
+                 gopro_mode: str = "auto"):
         self.settings = settings
         self.name = settings["experiment"]["name"]
         self.output_dir = Path(settings["experiment"]["output_dir"])
+        self.gopro_mode = gopro_mode  # "auto" or "manual"
 
         self.camera_manager = CameraManager(settings["cameras"])
-        self.gopro_manager = GoProManager(settings.get("gopros", []))
+        # In manual mode, don't try to auto-control GoPros
+        if gopro_mode == "manual":
+            self.gopro_manager = GoProManager([])
+            print("GoPro mode: MANUAL - experimenter controls GoPros")
+        else:
+            self.gopro_manager = GoProManager(settings.get("gopros", []))
         self.phases = self._load_phases(settings["phases"])
         self.current_phase_index = 0
 
@@ -179,8 +186,13 @@ class Experiment:
                           f"samples={stats['count']}{rr_info}")
             self.hr_monitor.disconnect()
 
-        # Disconnect GoPro cameras
-        self.gopro_manager.disconnect_all()
+        # Stop GoPro recording first, then disconnect
+        if self.gopro_mode == "auto":
+            print("Stopping all GoPro recordings...")
+            self.gopro_manager.stop_recording_all()
+            self.gopro_manager.disconnect_all()
+        else:
+            print("MANUAL MODE: Please stop GoPro recording and power off cameras.")
 
         # Close USB cameras
         self.camera_manager.close_all()
@@ -239,7 +251,7 @@ class Experiment:
         phase.complete()
 
     def _run_warmup_calibration(self, phase: Phase):
-        """Phase 3: Open cameras, test mic, connect GoPros. Wait for user Continue."""
+        """Phase 3: Open cameras, test mic, connect GoPros, record calibration. Wait for user Continue."""
         # Open USB cameras
         print("\n--- Opening USB Cameras ---")
         if not self.camera_manager.open_all():
@@ -258,19 +270,51 @@ class Experiment:
                 print(f"WARNING: Microphone '{self.mic_config.device_name}' not found")
 
         # Connect GoPros
-        print("\n--- Connecting GoPro Cameras ---")
-        if not self.gopro_manager.connect_all():
-            print("WARNING: Some GoPro cameras failed to connect")
+        if self.gopro_mode == "auto":
+            print("\n--- Connecting GoPro Cameras ---")
+            if not self.gopro_manager.connect_all():
+                print("WARNING: Some GoPro cameras failed to connect")
 
-        # Remind about T-pose and calibration
-        print("\nPlease stand in T-pose facing the front camera for calibration.")
-        print("Ensure the checkerboard is visible to all cameras if doing extrinsic calibration.")
+            # Start GoPro recording for calibration footage
+            print("\n--- Starting GoPro Recording (Calibration) ---")
+            self.gopro_manager.start_recording_all()
+            self._send_gui_event("recording_status", recording=True, gopros=True)
 
-        self._send_gui_event("wait_for_continue", message="Press Continue when ready to proceed.")
+            print("\nGoPros are recording. Please stand in T-pose facing the front camera.")
+            print("Ensure the checkerboard is visible to all cameras if doing extrinsic calibration.")
+            self._send_gui_event("wait_for_continue",
+                                 message="GoPros recording. Press Continue when calibration is done.")
+        else:
+            print("\n--- GoPro Mode: MANUAL ---")
+            print("Please start GoPro recording manually now.")
+            print("Stand in T-pose facing the front camera for calibration.")
+            self._send_gui_event("wait_for_continue",
+                                 message="MANUAL MODE: Start GoPros yourself. Press Continue when done.")
 
-        # Wait for user to press Continue
+        # Wait for user to press Continue, sending keep-alives while waiting
         print("Waiting for user to continue...")
-        self._wait_for_user_action("continue")
+        while True:
+            self._send_keepalive()
+            try:
+                action = self._user_action_queue.get(timeout=1.0)
+            except queue.Empty:
+                continue
+            if action.get("type") == "stop":
+                if self.gopro_mode == "auto":
+                    self.gopro_manager.stop_recording_all()
+                self._send_gui_event("recording_status", recording=False)
+                raise KeyboardInterrupt("User stopped experiment")
+            if action.get("type") == "continue":
+                break
+
+        # Stop GoPro recording after calibration
+        if self.gopro_mode == "auto":
+            print("\n--- Stopping GoPro Recording (Calibration) ---")
+            self.gopro_manager.stop_recording_all()
+        else:
+            print("\nPlease stop GoPro recording manually now.")
+        self._send_gui_event("recording_status", recording=False)
+
         phase.complete()
 
     def _run_performance(self, phase: Phase):
@@ -292,7 +336,10 @@ class Experiment:
             recorder.start()
 
         # Start GoPro recording
-        self.gopro_manager.start_recording_all()
+        if self.gopro_mode == "auto":
+            self.gopro_manager.start_recording_all()
+        else:
+            print("MANUAL MODE: Ensure GoPros are recording.")
 
         self._send_gui_event("wait_for_continue", message="Recording in progress. Press Continue when done.")
         self._send_gui_event("recording_status", recording=True, cameras=["overhead"], gopros=True)
@@ -314,7 +361,10 @@ class Experiment:
         # Stop recording
         if recorder:
             recorder.stop()
-        self.gopro_manager.stop_recording_all()
+        if self.gopro_mode == "auto":
+            self.gopro_manager.stop_recording_all()
+        else:
+            print("MANUAL MODE: Please stop GoPro recording now.")
 
         self._send_gui_event("recording_status", recording=False)
         phase.complete()
