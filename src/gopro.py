@@ -1,15 +1,95 @@
 """GoPro camera manager using goprocam for wireless control.
 
-Manages 2x GoPro Hero 7 Silver and 2x GoPro Hero 5 Session cameras.
-Each camera requires its own WiFi adapter connected to the camera's WiFi network.
+Manages multiple GoPro cameras, each controlled over WiFi via a dedicated
+USB WiFi adapter. Uses source-address binding to route HTTP traffic to the
+correct GoPro when multiple cameras share the same IP (10.5.5.9).
 """
 
+import http.client
+import platform
+import socket
+import subprocess
 import threading
 import time
 from dataclasses import dataclass
 from typing import Optional
 
+import urllib.request
+
 from goprocam import GoProCamera, constants
+
+
+def get_interface_ip(interface_name: str) -> Optional[str]:
+    """Get the IPv4 address of a WiFi interface connected to a GoPro network.
+
+    Looks for an IP in the 10.5.5.x subnet assigned by the GoPro's DHCP.
+    Windows only; returns None on other platforms.
+    """
+    if platform.system() != "Windows":
+        return None
+    try:
+        result = subprocess.run(
+            ["netsh", "interface", "ip", "show", "addresses", interface_name],
+            capture_output=True, text=True, timeout=5,
+        )
+        for line in result.stdout.splitlines():
+            stripped = line.strip()
+            # Match lines like "IP Address:  10.5.5.103"
+            if "IP Address" in stripped or "IP address" in stripped:
+                ip = stripped.rsplit(":", 1)[-1].strip()
+                if ip.startswith("10.5.5."):
+                    return ip
+    except Exception:
+        pass
+    # Fallback: parse ipconfig output
+    try:
+        result = subprocess.run(
+            ["ipconfig"], capture_output=True, text=True, timeout=5,
+        )
+        found_interface = False
+        for line in result.stdout.splitlines():
+            if interface_name in line:
+                found_interface = True
+            elif found_interface and "IPv4" in line:
+                ip = line.rsplit(":", 1)[-1].strip()
+                if ip.startswith("10.5.5."):
+                    return ip
+            elif found_interface and line.strip() == "":
+                found_interface = False
+    except Exception:
+        pass
+    return None
+
+
+class _BoundHTTPConnection(http.client.HTTPConnection):
+    """HTTPConnection that binds to a specific local source address."""
+
+    def __init__(self, host, source_address=None, **kwargs):
+        self._bind_address = source_address
+        super().__init__(host, **kwargs)
+
+    def connect(self):
+        self.sock = socket.create_connection(
+            (self.host, self.port),
+            self.timeout,
+            self._bind_address,
+        )
+
+
+class _BoundHTTPHandler(urllib.request.HTTPHandler):
+    """urllib HTTP handler that routes connections through a specific interface."""
+
+    def __init__(self, source_address):
+        super().__init__()
+        self._source_address = source_address
+
+    def http_open(self, req):
+        return self.do_open(
+            lambda host, **kw: _BoundHTTPConnection(
+                host, source_address=self._source_address, **kw
+            ),
+            req,
+        )
 
 
 @dataclass
@@ -23,30 +103,57 @@ class GoProConfig:
 
 
 class GoProCam:
-    """Wrapper for a single GoPro camera."""
+    """Wrapper for a single GoPro camera with interface-bound networking.
+
+    Uses a class-level lock and per-instance urllib openers to ensure HTTP
+    requests reach the correct GoPro when multiple cameras share the same IP.
+    """
+
+    # Class-level lock serializes all goprocam HTTP calls so that the correct
+    # urllib opener is active for each request.
+    _api_lock = threading.Lock()
 
     def __init__(self, config: GoProConfig):
         self.config = config
         self._camera: Optional[GoProCamera.GoPro] = None
         self._connected = False
+        self._opener: Optional[urllib.request.OpenerDirector] = None
 
     @property
     def is_connected(self) -> bool:
         """Whether the camera is currently connected."""
         return self._connected
 
+    def _install_opener(self):
+        """Install this camera's bound urllib opener. Must hold _api_lock."""
+        if self._opener is not None:
+            urllib.request.install_opener(self._opener)
+
     def connect(self) -> bool:
         """Connect to the GoPro camera via its WiFi network."""
         print(f"Connecting to GoPro: {self.config.name} ({self.config.model}) "
               f"on interface {self.config.wifi_interface}...")
+
+        # Find the local IP of the WiFi adapter for source-address binding
+        source_ip = get_interface_ip(self.config.wifi_interface)
+        if source_ip:
+            print(f"  Interface {self.config.wifi_interface} -> local IP {source_ip}")
+            handler = _BoundHTTPHandler((source_ip, 0))
+            self._opener = urllib.request.build_opener(handler)
+        else:
+            print(f"  WARNING: Could not find IP for {self.config.wifi_interface}, "
+                  f"using default routing")
+
         try:
-            self._camera = GoProCamera.GoPro(
-                ip_address=self.config.ip_address,
-                camera=constants.gpcontrol,
-                api_type=constants.ApiServerType.SMARTY,
-            )
-            # Verify connection by getting camera info
-            model_name = self._camera.infoCamera(constants.Camera.Name)
+            with GoProCam._api_lock:
+                self._install_opener()
+                self._camera = GoProCamera.GoPro(
+                    ip_address=self.config.ip_address,
+                    camera=constants.gpcontrol,
+                    api_type=constants.ApiServerType.SMARTY,
+                )
+                # Verify connection by getting camera info
+                model_name = self._camera.infoCamera(constants.Camera.Name)
             print(f"Connected to GoPro: {self.config.name} - Model: {model_name}")
             self._connected = True
             return True
@@ -60,7 +167,9 @@ class GoProCam:
         if not self._connected or self._camera is None:
             return
         try:
-            self._camera.mode(constants.Mode.VideoMode, constants.Mode.SubMode.Video.Video)
+            with GoProCam._api_lock:
+                self._install_opener()
+                self._camera.mode(constants.Mode.VideoMode, constants.Mode.SubMode.Video.Video)
             print(f"GoPro {self.config.name}: Set to video mode")
         except Exception as e:
             print(f"ERROR: Failed to set video mode on {self.config.name}: {e}")
@@ -70,7 +179,9 @@ class GoProCam:
         if not self._connected or self._camera is None:
             return
         try:
-            self._camera.shutter(constants.start)
+            with GoProCam._api_lock:
+                self._install_opener()
+                self._camera.shutter(constants.start)
             print(f"GoPro {self.config.name}: Recording started")
         except Exception as e:
             print(f"ERROR: Failed to start recording on {self.config.name}: {e}")
@@ -80,7 +191,9 @@ class GoProCam:
         if not self._connected or self._camera is None:
             return
         try:
-            self._camera.shutter(constants.stop)
+            with GoProCam._api_lock:
+                self._install_opener()
+                self._camera.shutter(constants.stop)
             print(f"GoPro {self.config.name}: Recording stopped")
         except Exception as e:
             print(f"ERROR: Failed to stop recording on {self.config.name}: {e}")
@@ -90,7 +203,9 @@ class GoProCam:
         if not self._connected or self._camera is None:
             return False
         try:
-            return self._camera.IsRecording() == 1
+            with GoProCam._api_lock:
+                self._install_opener()
+                return self._camera.IsRecording() == 1
         except Exception:
             return False
 
@@ -99,9 +214,11 @@ class GoProCam:
         if not self._connected or self._camera is None:
             return None
         try:
-            return self._camera.getStatus(
-                constants.Status.Status, constants.Status.STATUS.BattPercent
-            )
+            with GoProCam._api_lock:
+                self._install_opener()
+                return self._camera.getStatus(
+                    constants.Status.Status, constants.Status.STATUS.BattPercent
+                )
         except Exception:
             return None
 
@@ -110,7 +227,9 @@ class GoProCam:
         if not self._connected or self._camera is None:
             return
         try:
-            self._camera.KeepAlive()
+            with GoProCam._api_lock:
+                self._install_opener()
+                self._camera.KeepAlive()
         except Exception:
             pass
 
@@ -128,11 +247,11 @@ class GoProCam:
 
 
 class GoProManager:
-    """Manages multiple GoPro cameras with threaded control.
+    """Manages multiple GoPro cameras with interface-bound networking.
 
     Each camera requires a separate WiFi adapter connected to that camera's
     WiFi network. All cameras share the default GoPro IP (10.5.5.9) but are
-    accessed through different network interfaces.
+    accessed through different network interfaces via source-address binding.
     """
 
     def __init__(self, gopro_configs: list[dict]):
@@ -150,10 +269,10 @@ class GoProManager:
                 self.cameras[config.id] = GoProCam(config)
 
     def connect_all(self) -> bool:
-        """Connect to all GoPro cameras.
+        """Connect to all GoPro cameras sequentially.
 
-        Uses threading to connect to multiple cameras in parallel since each
-        camera is on a different WiFi interface.
+        Sequential connection is required because each camera installs its own
+        urllib opener bound to its WiFi interface's local IP address.
         """
         if not self.cameras:
             print("No GoPro cameras configured")
@@ -161,18 +280,9 @@ class GoProManager:
 
         print(f"\nConnecting to {len(self.cameras)} GoPro cameras...")
         results = {}
-        threads = []
-
-        def connect_cam(cam_id, cam):
-            results[cam_id] = cam.connect()
 
         for cam_id, cam in self.cameras.items():
-            t = threading.Thread(target=connect_cam, args=(cam_id, cam))
-            threads.append(t)
-            t.start()
-
-        for t in threads:
-            t.join(timeout=30.0)
+            results[cam_id] = cam.connect()
 
         # Set all cameras to video mode after connecting
         for cam_id, cam in self.cameras.items():
@@ -186,9 +296,10 @@ class GoProManager:
         return connected == total
 
     def start_recording_all(self):
-        """Trigger all GoPro cameras to start recording simultaneously.
+        """Trigger all GoPro cameras to start recording.
 
-        Uses threading to minimize the delay between camera triggers.
+        Uses threading so both cameras start nearly simultaneously.
+        The API lock inside each camera serializes the actual HTTP calls.
         """
         print("\nTriggering all GoPro cameras to start recording...")
         threads = []
@@ -203,7 +314,7 @@ class GoProManager:
         print("All GoPro cameras triggered to record")
 
     def stop_recording_all(self):
-        """Stop recording on all GoPro cameras simultaneously."""
+        """Stop recording on all GoPro cameras."""
         print("\nStopping all GoPro cameras...")
         threads = []
         for cam in self.cameras.values():
@@ -217,7 +328,7 @@ class GoProManager:
         print("All GoPro cameras stopped")
 
     def keep_alive_all(self):
-        """Send keep-alive to all cameras in parallel."""
+        """Send keep-alive to all cameras."""
         threads = []
         for cam in self.cameras.values():
             t = threading.Thread(target=cam.keep_alive)
