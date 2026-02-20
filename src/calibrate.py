@@ -1,12 +1,15 @@
 """Pre-flight calibration tool to verify all devices are connected and working."""
 
 import sys
+import threading
 import time
 from typing import Optional
 
 from .camera import Camera, CameraConfig
 from .gopro import GoProCam, GoProConfig, GoProManager
 from .heart_rate import PolarH10
+
+GOPRO_CONNECT_TIMEOUT = 30  # seconds
 
 
 class CalibrationTool:
@@ -93,7 +96,11 @@ class CalibrationTool:
             })
 
     def _check_gopros(self):
-        """Check each GoPro camera can connect and report battery."""
+        """Check each GoPro camera can connect and report battery.
+
+        Uses a 30-second timeout. If connection doesn't complete in time,
+        all GoPros are marked as FAIL with a timeout detail.
+        """
         gopro_cfgs = self.settings.get("gopros", [])
         if not gopro_cfgs:
             print("\nNo GoPro cameras configured.")
@@ -102,15 +109,39 @@ class CalibrationTool:
         enabled_cfgs = [c for c in gopro_cfgs if c.get("enabled", True)]
         print(f"\n--- GoPro Cameras ({len(enabled_cfgs)}) ---")
 
-        # Use GoProManager for threaded parallel connection
         manager = GoProManager(gopro_cfgs)
 
         if not manager.cameras:
             print("  No enabled GoPro cameras.")
             return
 
-        manager.connect_all()
+        # Run connection with a timeout
+        connect_done = threading.Event()
 
+        def do_connect():
+            manager.connect_all()
+            connect_done.set()
+
+        t = threading.Thread(target=do_connect, daemon=True)
+        t.start()
+
+        if not connect_done.wait(timeout=GOPRO_CONNECT_TIMEOUT):
+            # Timed out
+            print(f"  GoPro connection timed out after {GOPRO_CONNECT_TIMEOUT}s")
+            for cam_id, cam in manager.cameras.items():
+                self._results.append({
+                    "device": cam.config.name,
+                    "type": "GoPro",
+                    "status": "FAIL",
+                    "detail": f"connection timed out ({GOPRO_CONNECT_TIMEOUT}s)",
+                })
+            try:
+                manager.disconnect_all()
+            except Exception:
+                pass
+            return
+
+        # Connection finished in time — check results
         for cam_id, cam in manager.cameras.items():
             connected = cam.is_connected
             battery = cam.get_battery() if connected else None
@@ -271,6 +302,11 @@ class CalibrationTool:
                 "status": "FAIL",
                 "detail": str(e),
             })
+
+    def gopro_failed(self) -> bool:
+        """Return True if any GoPro device failed calibration."""
+        return any(r["type"] == "GoPro" and r["status"] == "FAIL"
+                   for r in self._results)
 
     def _print_summary(self):
         """Print a formatted summary table."""
