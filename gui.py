@@ -28,12 +28,17 @@ except ImportError:
     )
     sys.exit(1)
 
+try:
+    from PIL import Image as PILImage
+except ImportError:
+    PILImage = None
+
 # --- Constants ----------------------------------------------------------------
 
 APP_TITLE = "CaptureExpert"
 DEFAULT_CONFIG = "settings.json"
-WINDOW_SIZE = "1150x800"
-MIN_SIZE = (950, 650)
+WINDOW_SIZE = "1200x850"
+MIN_SIZE = (1000, 700)
 
 FONT_HEADER = ("Segoe UI", 18, "bold")
 FONT_SUB = ("Segoe UI", 14, "bold")
@@ -49,8 +54,14 @@ CLR_RED = "#e74c3c"
 CLR_RED_H = "#c0392b"
 CLR_ORANGE = "#e67e22"
 CLR_ORANGE_H = "#d35400"
+CLR_PURPLE = "#9b59b6"
+CLR_PURPLE_H = "#8e44ad"
 
 GOPRO_MODELS = ["hero7_silver", "hero5_session"]
+CAMERA_ROLES = ["overhead", "face", ""]
+
+VIDEO_DISPLAY_WIDTH = 640
+VIDEO_DISPLAY_HEIGHT = 360
 
 
 # --- Stdout Redirector --------------------------------------------------------
@@ -92,24 +103,35 @@ class CaptureExpertApp(ctk.CTk):
         self.output_queue = queue.Queue()
         self._worker_thread = None
         self._is_running = False
+        self._active_experiment = None
+
+        # Event queues for experiment <-> GUI communication
+        self._gui_event_queue = queue.Queue()
+        self._user_action_queue = queue.Queue()
 
         # Widget references (populated in build methods)
         self._exp_w = {}
         self._cam_cards = []
         self._gp_cards = []
         self._hr_w = {}
+        self._mic_w = {}
         self._phase_cards = []
-        self._undist_w = {}
+        self._cal_w = {}
 
         # Scrollable frame references (for rebuilding)
         self._cam_scroll = None
         self._gp_scroll = None
         self._phase_scroll = None
 
+        # Video player state
+        self._video_player_visible = False
+        self._video_allow_pause = False
+
         self._load_settings()
         self._build_ui()
         self._populate_ui()
         self._poll_console()
+        self._poll_gui_events()
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -126,9 +148,9 @@ class CaptureExpertApp(ctk.CTk):
         except (FileNotFoundError, json.JSONDecodeError):
             self.settings = {
                 "experiment": {
-                    "name": "default_experiment",
+                    "name": "Taekwondo Experiment",
                     "output_dir": "./output",
-                    "save_format": "png",
+                    "recording_format": "mp4",
                 },
                 "cameras": [],
                 "gopros": [],
@@ -136,6 +158,20 @@ class CaptureExpertApp(ctk.CTk):
                     "enabled": False,
                     "device_address": None,
                     "ecg_enabled": False,
+                },
+                "microphone": {
+                    "enabled": False,
+                    "device_name": "Tonor",
+                    "device_index": None,
+                    "sample_rate": 44100,
+                    "channels": 1,
+                },
+                "calibration": {
+                    "checkerboard_cols": 10,
+                    "checkerboard_rows": 7,
+                    "square_size_mm": 25.0,
+                    "run_intrinsic": True,
+                    "run_extrinsic": True,
                 },
                 "phases": [],
             }
@@ -162,7 +198,7 @@ class CaptureExpertApp(ctk.CTk):
         w = self._exp_w
         self.settings["experiment"]["name"] = w["name"].get()
         self.settings["experiment"]["output_dir"] = w["output_dir"].get()
-        self.settings["experiment"]["save_format"] = w["save_format"].get()
+        self.settings["experiment"]["recording_format"] = w["recording_format"].get()
 
         # Cameras
         cameras = []
@@ -179,6 +215,7 @@ class CaptureExpertApp(ctk.CTk):
                         ],
                         "fps": int(c["fps"].get() or 30),
                         "enabled": bool(c["enabled"].get()),
+                        "role": c["role"].get() or None,
                     }
                 )
             except ValueError:
@@ -207,20 +244,44 @@ class CaptureExpertApp(ctk.CTk):
         self.settings["heart_rate"]["device_address"] = addr if addr else None
         self.settings["heart_rate"]["ecg_enabled"] = bool(hw["ecg_enabled"].get())
 
+        # Microphone
+        mw = self._mic_w
+        self.settings.setdefault("microphone", {})
+        self.settings["microphone"]["enabled"] = bool(mw["enabled"].get())
+        self.settings["microphone"]["device_name"] = mw["device_name"].get().strip()
+        dev_idx = mw["device_index"].get().strip()
+        self.settings["microphone"]["device_index"] = int(dev_idx) if dev_idx else None
+        sr = mw["sample_rate"].get().strip()
+        self.settings["microphone"]["sample_rate"] = int(sr) if sr else 44100
+        ch = mw["channels"].get().strip()
+        self.settings["microphone"]["channels"] = int(ch) if ch else 1
+
+        # Calibration
+        cw = self._cal_w
+        self.settings.setdefault("calibration", {})
+        self.settings["calibration"]["run_intrinsic"] = bool(cw["run_intrinsic"].get())
+        self.settings["calibration"]["run_extrinsic"] = bool(cw["run_extrinsic"].get())
+
         # Phases
         phases = []
         for p in self._phase_cards:
             dur = p["duration"].get().strip()
             interval = p["interval"].get().strip()
-            phases.append(
-                {
-                    "id": p["id"].get(),
-                    "name": p["name"].get(),
-                    "duration_seconds": int(dur) if dur else 0,
-                    "capture_interval_ms": int(interval) if interval else None,
-                    "instructions": p["instructions"].get("1.0", "end-1c"),
-                }
-            )
+            phase_data = {
+                "id": p["id"].get(),
+                "name": p["name"].get(),
+                "duration_seconds": int(dur) if dur else 0,
+                "capture_interval_ms": int(interval) if interval else None,
+                "instructions": p["instructions"].get("1.0", "end-1c"),
+            }
+            # Preserve extended fields from existing settings
+            existing = self.settings.get("phases", [])
+            if p.get("_index") is not None and p["_index"] < len(existing):
+                for key in ("record_video", "record_audio", "record_gopro",
+                            "allow_pause", "cameras"):
+                    if key in existing[p["_index"]]:
+                        phase_data[key] = existing[p["_index"]][key]
+            phases.append(phase_data)
         self.settings["phases"] = phases
 
     # ==========================================================================
@@ -240,7 +301,7 @@ class CaptureExpertApp(ctk.CTk):
         self._build_experiment_tab(self.tabview.add("Experiment"))
         self._build_devices_tab(self.tabview.add("Devices"))
         self._build_phases_tab(self.tabview.add("Phases"))
-        self._build_undistort_tab(self.tabview.add("Undistort"))
+        self._build_calibration_tab(self.tabview.add("Calibration"))
 
         # Settings bar
         bar = ctk.CTkFrame(self, height=40)
@@ -265,6 +326,7 @@ class CaptureExpertApp(ctk.CTk):
         parent.grid_columnconfigure(0, weight=1)
         parent.grid_columnconfigure(1, weight=1)
         parent.grid_rowconfigure(0, weight=1)
+        parent.grid_rowconfigure(1, weight=2)
 
         # Left: settings
         left = ctk.CTkFrame(parent)
@@ -274,19 +336,19 @@ class CaptureExpertApp(ctk.CTk):
             anchor="w", padx=15, pady=(15, 10)
         )
 
-        self._exp_w["name"] = self._labeled_entry(left, "Name:", "experiment_name")
+        self._exp_w["name"] = self._labeled_entry(left, "Name:", "Taekwondo Experiment")
         self._exp_w["output_dir"] = self._labeled_entry(
             left, "Output Dir:", "./output", browse="dir"
         )
 
         row = ctk.CTkFrame(left, fg_color="transparent")
         row.pack(fill="x", padx=15, pady=3)
-        ctk.CTkLabel(row, text="Save Format:", width=100, anchor="w").pack(side="left")
-        fmt = ctk.StringVar(value="png")
-        ctk.CTkOptionMenu(row, variable=fmt, values=["png", "jpg", "bmp"], width=100).pack(
+        ctk.CTkLabel(row, text="Rec. Format:", width=100, anchor="w").pack(side="left")
+        fmt = ctk.StringVar(value="mp4")
+        ctk.CTkOptionMenu(row, variable=fmt, values=["mp4"], width=100).pack(
             side="left"
         )
-        self._exp_w["save_format"] = fmt
+        self._exp_w["recording_format"] = fmt
 
         # Right: actions
         right = ctk.CTkFrame(parent)
@@ -342,6 +404,9 @@ class CaptureExpertApp(ctk.CTk):
         prog_f = ctk.CTkFrame(right, fg_color="transparent")
         prog_f.pack(fill="x", padx=15, pady=(15, 5))
 
+        self._phase_indicator = ctk.CTkLabel(prog_f, text="", font=FONT_BODY)
+        self._phase_indicator.pack(anchor="w")
+
         self._progress_label = ctk.CTkLabel(prog_f, text="", font=FONT_SMALL)
         self._progress_label.pack(anchor="w")
 
@@ -349,13 +414,71 @@ class CaptureExpertApp(ctk.CTk):
         self._progress_bar.pack(fill="x", pady=(5, 0))
         self._progress_bar.set(0)
 
+        # Video player panel (hidden by default, spans both columns)
+        self._build_video_player_panel(parent)
+
+    def _build_video_player_panel(self, parent):
+        """Build the video player panel (hidden by default)."""
+        self._vp_frame = ctk.CTkFrame(parent)
+        # Not placed in grid initially - will be shown/hidden dynamically
+
+        ctk.CTkLabel(self._vp_frame, text="Video Player", font=FONT_SUB).pack(
+            anchor="w", padx=15, pady=(10, 5)
+        )
+
+        self._vp_message = ctk.CTkLabel(
+            self._vp_frame, text="", font=FONT_SMALL, text_color="gray"
+        )
+        self._vp_message.pack(anchor="w", padx=15)
+
+        # Video display area
+        self._vp_canvas = ctk.CTkLabel(
+            self._vp_frame, text="No video", width=VIDEO_DISPLAY_WIDTH,
+            height=VIDEO_DISPLAY_HEIGHT, fg_color="#1a1a1a"
+        )
+        self._vp_canvas.pack(padx=15, pady=5)
+
+        # Controls row
+        ctrl = ctk.CTkFrame(self._vp_frame, fg_color="transparent")
+        ctrl.pack(fill="x", padx=15, pady=(0, 5))
+
+        self._vp_play_btn = ctk.CTkButton(
+            ctrl, text="Play", width=80, height=32,
+            fg_color=CLR_GREEN, hover_color=CLR_GREEN_H,
+            command=self._vp_play,
+        )
+        self._vp_play_btn.pack(side="left", padx=(0, 5))
+
+        self._vp_pause_btn = ctk.CTkButton(
+            ctrl, text="Pause", width=80, height=32,
+            fg_color=CLR_ORANGE, hover_color=CLR_ORANGE_H,
+            command=self._vp_pause,
+        )
+        self._vp_pause_btn.pack(side="left", padx=(0, 10))
+
+        self._vp_time_label = ctk.CTkLabel(ctrl, text="0:00 / 0:00", font=FONT_SMALL)
+        self._vp_time_label.pack(side="left", padx=10)
+
+        self._vp_recording_label = ctk.CTkLabel(
+            ctrl, text="", font=FONT_SMALL, text_color=CLR_RED
+        )
+        self._vp_recording_label.pack(side="right", padx=10)
+
+        self._vp_continue_btn = ctk.CTkButton(
+            ctrl, text="Continue", width=100, height=32,
+            fg_color=CLR_BLUE, hover_color=CLR_BLUE_H,
+            command=self._vp_continue,
+        )
+        self._vp_continue_btn.pack(side="right", padx=(0, 5))
+
     # --- Devices Tab ---
 
     def _build_devices_tab(self, parent):
         parent.grid_columnconfigure(0, weight=1)
         parent.grid_columnconfigure(1, weight=1)
-        parent.grid_rowconfigure(0, weight=1)
+        parent.grid_rowconfigure(0, weight=2)
         parent.grid_rowconfigure(1, weight=1)
+        parent.grid_rowconfigure(2, weight=1)
 
         # USB Cameras (top-left)
         cam_frame = ctk.CTkFrame(parent)
@@ -385,13 +508,11 @@ class CaptureExpertApp(ctk.CTk):
         self._gp_scroll = ctk.CTkScrollableFrame(gp_frame)
         self._gp_scroll.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Heart Rate (bottom, spans both columns)
+        # Heart Rate (bottom-left)
         hr_frame = ctk.CTkFrame(parent)
-        hr_frame.grid(
-            row=1, column=0, columnspan=2, padx=0, pady=(3, 0), sticky="nsew"
-        )
+        hr_frame.grid(row=1, column=0, padx=(0, 3), pady=(3, 0), sticky="nsew")
 
-        ctk.CTkLabel(hr_frame, text="Heart Rate Monitor (Polar H10)", font=FONT_SUB).pack(
+        ctk.CTkLabel(hr_frame, text="Heart Rate (Polar H10)", font=FONT_SUB).pack(
             anchor="w", padx=15, pady=(10, 5)
         )
 
@@ -404,18 +525,56 @@ class CaptureExpertApp(ctk.CTk):
         )
         self._hr_w["enabled"] = en_var
 
-        ctk.CTkLabel(hr_row, text="Device Address:", anchor="w").pack(
+        ctk.CTkLabel(hr_row, text="Address:", anchor="w").pack(
             side="left", padx=(0, 5)
         )
-        addr_e = ctk.CTkEntry(hr_row, width=200, placeholder_text="auto-scan if empty")
-        addr_e.pack(side="left", padx=(0, 20))
+        addr_e = ctk.CTkEntry(hr_row, width=180, placeholder_text="auto-scan if empty")
+        addr_e.pack(side="left", padx=(0, 15))
         self._hr_w["device_address"] = addr_e
 
         ecg_var = ctk.IntVar(value=0)
-        ctk.CTkSwitch(hr_row, text="ECG Recording", variable=ecg_var).pack(
+        ctk.CTkSwitch(hr_row, text="ECG", variable=ecg_var).pack(
             side="left"
         )
         self._hr_w["ecg_enabled"] = ecg_var
+
+        # Microphone (bottom-right)
+        mic_frame = ctk.CTkFrame(parent)
+        mic_frame.grid(row=1, column=1, padx=(3, 0), pady=(3, 0), sticky="nsew")
+
+        ctk.CTkLabel(mic_frame, text="Microphone", font=FONT_SUB).pack(
+            anchor="w", padx=15, pady=(10, 5)
+        )
+
+        mic_r1 = ctk.CTkFrame(mic_frame, fg_color="transparent")
+        mic_r1.pack(fill="x", padx=15, pady=3)
+
+        mic_en = ctk.IntVar(value=0)
+        ctk.CTkSwitch(mic_r1, text="Enabled", variable=mic_en).pack(
+            side="left", padx=(0, 15)
+        )
+        self._mic_w["enabled"] = mic_en
+
+        ctk.CTkLabel(mic_r1, text="Device:", anchor="w").pack(side="left", padx=(0, 5))
+        self._mic_w["device_name"] = self._inline_entry(mic_r1, "Tonor", width=120)
+
+        ctk.CTkLabel(mic_r1, text="Index:", anchor="w").pack(side="left", padx=(10, 5))
+        self._mic_w["device_index"] = self._inline_entry(mic_r1, "", width=40)
+
+        mic_r2 = ctk.CTkFrame(mic_frame, fg_color="transparent")
+        mic_r2.pack(fill="x", padx=15, pady=3)
+
+        ctk.CTkLabel(mic_r2, text="Sample Rate:", anchor="w").pack(side="left", padx=(0, 5))
+        self._mic_w["sample_rate"] = self._inline_entry(mic_r2, "44100", width=70)
+
+        ctk.CTkLabel(mic_r2, text="Channels:", anchor="w").pack(side="left", padx=(10, 5))
+        self._mic_w["channels"] = self._inline_entry(mic_r2, "1", width=40)
+
+        ctk.CTkButton(
+            mic_r2, text="Test Mic", width=80, height=28,
+            fg_color=CLR_PURPLE, hover_color=CLR_PURPLE_H,
+            command=self._test_microphone,
+        ).pack(side="right")
 
     # --- Phases Tab ---
 
@@ -432,7 +591,7 @@ class CaptureExpertApp(ctk.CTk):
 
         ctk.CTkLabel(
             hdr,
-            text="Duration 0 = indefinite (wait for Stop).  Empty capture interval = no USB capture.",
+            text="Duration 0 = wait for user Continue. Phases are controlled by experiment handlers.",
             font=FONT_SMALL,
             text_color="gray",
         ).pack(side="left", padx=20)
@@ -440,16 +599,22 @@ class CaptureExpertApp(ctk.CTk):
         self._phase_scroll = ctk.CTkScrollableFrame(parent)
         self._phase_scroll.grid(row=1, column=0, padx=5, pady=5, sticky="nsew")
 
-    # --- Undistort Tab ---
+    # --- Calibration Tab (replaces Undistort) ---
 
-    def _build_undistort_tab(self, parent):
+    def _build_calibration_tab(self, parent):
         parent.grid_columnconfigure(0, weight=1)
+        parent.grid_columnconfigure(1, weight=1)
+        parent.grid_rowconfigure(0, weight=1)
 
-        ctk.CTkLabel(parent, text="GoPro Lens Correction", font=FONT_SUB).pack(
+        # Left: Lens Correction
+        left = ctk.CTkFrame(parent)
+        left.grid(row=0, column=0, padx=(0, 5), pady=5, sticky="nsew")
+
+        ctk.CTkLabel(left, text="GoPro Lens Correction", font=FONT_SUB).pack(
             anchor="w", padx=15, pady=(15, 5)
         )
         ctk.CTkLabel(
-            parent,
+            left,
             text="Apply barrel distortion correction to GoPro video files.\n"
             "Select a single .mp4 file or a folder containing .mp4 files.",
             font=FONT_SMALL,
@@ -457,12 +622,12 @@ class CaptureExpertApp(ctk.CTk):
             justify="left",
         ).pack(anchor="w", padx=15, pady=(0, 10))
 
-        self._undist_w["input"] = self._labeled_entry(
-            parent, "Input Path:", "", browse="file_or_dir"
+        self._cal_w["input"] = self._labeled_entry(
+            left, "Input Path:", "", browse="file_or_dir"
         )
 
-        btn_f = ctk.CTkFrame(parent, fg_color="transparent")
-        btn_f.pack(fill="x", padx=15, pady=15)
+        btn_f = ctk.CTkFrame(left, fg_color="transparent")
+        btn_f.pack(fill="x", padx=15, pady=10)
 
         self._undist_btn = ctk.CTkButton(
             btn_f,
@@ -475,6 +640,67 @@ class CaptureExpertApp(ctk.CTk):
             command=self._run_undistort,
         )
         self._undist_btn.pack(side="left")
+
+        # Right: Multi-Camera Calibration
+        right = ctk.CTkFrame(parent)
+        right.grid(row=0, column=1, padx=(5, 0), pady=5, sticky="nsew")
+
+        ctk.CTkLabel(right, text="Multi-Camera Calibration", font=FONT_SUB).pack(
+            anchor="w", padx=15, pady=(15, 5)
+        )
+        ctk.CTkLabel(
+            right,
+            text="Upload GoPro footage and run intrinsic + extrinsic\n"
+            "calibration across multiple cameras.",
+            font=FONT_SMALL,
+            text_color="gray",
+            justify="left",
+        ).pack(anchor="w", padx=15, pady=(0, 10))
+
+        # GoPro file browser entries
+        self._cal_w["gopro_files"] = []
+        for i in range(2):
+            row = ctk.CTkFrame(right, fg_color="transparent")
+            row.pack(fill="x", padx=15, pady=2)
+            ctk.CTkLabel(row, text=f"GoPro {i+1}:", width=70, anchor="w").pack(side="left")
+            entry = ctk.CTkEntry(row)
+            entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+            ctk.CTkButton(
+                row, text="Browse", width=70,
+                command=lambda e=entry: self._browse_file(e),
+            ).pack(side="left")
+            self._cal_w["gopro_files"].append(entry)
+
+        # Calibration options
+        opt_f = ctk.CTkFrame(right, fg_color="transparent")
+        opt_f.pack(fill="x", padx=15, pady=(10, 5))
+
+        intr_var = ctk.IntVar(value=1)
+        ctk.CTkSwitch(opt_f, text="Intrinsic Cal", variable=intr_var).pack(
+            side="left", padx=(0, 20)
+        )
+        self._cal_w["run_intrinsic"] = intr_var
+
+        extr_var = ctk.IntVar(value=1)
+        ctk.CTkSwitch(opt_f, text="Extrinsic Cal", variable=extr_var).pack(
+            side="left"
+        )
+        self._cal_w["run_extrinsic"] = extr_var
+
+        cal_btn_f = ctk.CTkFrame(right, fg_color="transparent")
+        cal_btn_f.pack(fill="x", padx=15, pady=10)
+
+        self._run_cal_btn = ctk.CTkButton(
+            cal_btn_f,
+            text="Run Calibration",
+            font=FONT_BODY,
+            fg_color=CLR_PURPLE,
+            hover_color=CLR_PURPLE_H,
+            height=42,
+            width=200,
+            command=self._run_multicam_calibration,
+        )
+        self._run_cal_btn.pack(side="left")
 
     # --- Console ---
 
@@ -500,7 +726,7 @@ class CaptureExpertApp(ctk.CTk):
         exp = self.settings.get("experiment", {})
         self._set_entry(self._exp_w["name"], exp.get("name", ""))
         self._set_entry(self._exp_w["output_dir"], exp.get("output_dir", "./output"))
-        self._exp_w["save_format"].set(exp.get("save_format", "png"))
+        self._exp_w["recording_format"].set(exp.get("recording_format", "mp4"))
 
         # Heart Rate
         hr = self.settings.get("heart_rate", {})
@@ -508,6 +734,20 @@ class CaptureExpertApp(ctk.CTk):
         addr = hr.get("device_address") or ""
         self._set_entry(self._hr_w["device_address"], addr)
         self._hr_w["ecg_enabled"].set(1 if hr.get("ecg_enabled") else 0)
+
+        # Microphone
+        mic = self.settings.get("microphone", {})
+        self._mic_w["enabled"].set(1 if mic.get("enabled") else 0)
+        self._set_entry(self._mic_w["device_name"], mic.get("device_name", "Tonor"))
+        dev_idx = mic.get("device_index")
+        self._set_entry(self._mic_w["device_index"], str(dev_idx) if dev_idx is not None else "")
+        self._set_entry(self._mic_w["sample_rate"], str(mic.get("sample_rate", 44100)))
+        self._set_entry(self._mic_w["channels"], str(mic.get("channels", 1)))
+
+        # Calibration
+        cal = self.settings.get("calibration", {})
+        self._cal_w["run_intrinsic"].set(1 if cal.get("run_intrinsic", True) else 0)
+        self._cal_w["run_extrinsic"].set(1 if cal.get("run_extrinsic", True) else 0)
 
         self._rebuild_cameras()
         self._rebuild_gopros()
@@ -519,17 +759,20 @@ class CaptureExpertApp(ctk.CTk):
         cams = s.get("cameras", [])
         gps = s.get("gopros", [])
         hr = s.get("heart_rate", {})
+        mic = s.get("microphone", {})
         phases = s.get("phases", [])
 
         cam_en = sum(1 for c in cams if c.get("enabled", True))
         gp_en = sum(1 for g in gps if g.get("enabled", True))
         hr_status = "Enabled" if hr.get("enabled") else "Disabled"
+        mic_status = "Enabled" if mic.get("enabled") else "Disabled"
 
         text = (
-            f"Cameras:  {len(cams)} configured ({cam_en} enabled)\n"
-            f"GoPros:   {len(gps)} configured ({gp_en} enabled)\n"
+            f"Cameras:    {len(cams)} configured ({cam_en} enabled)\n"
+            f"GoPros:     {len(gps)} configured ({gp_en} enabled)\n"
             f"Heart Rate: {hr_status}\n"
-            f"Phases:   {len(phases)} configured"
+            f"Microphone: {mic_status}\n"
+            f"Phases:     {len(phases)} configured"
         )
         self._summary_label.configure(text=text)
 
@@ -548,7 +791,7 @@ class CaptureExpertApp(ctk.CTk):
         card.pack(fill="x", padx=2, pady=3)
         refs = {}
 
-        # Row 1: enabled + name
+        # Row 1: enabled + name + role
         r1 = ctk.CTkFrame(card, fg_color="transparent")
         r1.pack(fill="x", padx=8, pady=(6, 2))
 
@@ -569,26 +812,33 @@ class CaptureExpertApp(ctk.CTk):
             command=lambda idx=index: self._remove_camera(idx),
         ).pack(side="right", padx=(5, 0))
 
-        # Row 2: id, index, resolution, fps
+        # Row 2: id, index, resolution, fps, role
         r2 = ctk.CTkFrame(card, fg_color="transparent")
         r2.pack(fill="x", padx=8, pady=(0, 6))
 
         ctk.CTkLabel(r2, text="ID:", width=25, anchor="w").pack(side="left")
         refs["id"] = self._inline_entry(r2, cam.get("id", ""), width=80)
 
-        ctk.CTkLabel(r2, text="Index:", width=45, anchor="w").pack(side="left", padx=(8, 0))
+        ctk.CTkLabel(r2, text="Idx:", width=30, anchor="w").pack(side="left", padx=(8, 0))
         refs["device_index"] = self._inline_entry(
-            r2, str(cam.get("device_index", 0)), width=40
+            r2, str(cam.get("device_index", 0)), width=35
         )
 
         ctk.CTkLabel(r2, text="Res:", width=30, anchor="w").pack(side="left", padx=(8, 0))
         res = cam.get("resolution", [1920, 1080])
-        refs["res_w"] = self._inline_entry(r2, str(res[0]), width=55)
+        refs["res_w"] = self._inline_entry(r2, str(res[0]), width=50)
         ctk.CTkLabel(r2, text="x", width=12).pack(side="left")
-        refs["res_h"] = self._inline_entry(r2, str(res[1]), width=55)
+        refs["res_h"] = self._inline_entry(r2, str(res[1]), width=50)
 
-        ctk.CTkLabel(r2, text="FPS:", width=35, anchor="w").pack(side="left", padx=(8, 0))
-        refs["fps"] = self._inline_entry(r2, str(cam.get("fps", 30)), width=40)
+        ctk.CTkLabel(r2, text="FPS:", width=30, anchor="w").pack(side="left", padx=(8, 0))
+        refs["fps"] = self._inline_entry(r2, str(cam.get("fps", 30)), width=35)
+
+        ctk.CTkLabel(r2, text="Role:", width=35, anchor="w").pack(side="left", padx=(8, 0))
+        role_var = ctk.StringVar(value=cam.get("role", "") or "")
+        ctk.CTkOptionMenu(r2, variable=role_var, values=CAMERA_ROLES, width=90).pack(
+            side="left"
+        )
+        refs["role"] = role_var
 
         self._cam_cards.append(refs)
 
@@ -671,7 +921,7 @@ class CaptureExpertApp(ctk.CTk):
     def _create_phase_card(self, parent, phase, index):
         card = ctk.CTkFrame(parent)
         card.pack(fill="x", padx=2, pady=3)
-        refs = {}
+        refs = {"_index": index}
 
         # Row 1: phase number, name, remove
         r1 = ctk.CTkFrame(card, fg_color="transparent")
@@ -740,6 +990,7 @@ class CaptureExpertApp(ctk.CTk):
                 "resolution": [1920, 1080],
                 "fps": 30,
                 "enabled": True,
+                "role": "",
             }
         )
         self._rebuild_cameras()
@@ -782,9 +1033,14 @@ class CaptureExpertApp(ctk.CTk):
             {
                 "id": f"phase_{n + 1}",
                 "name": f"Phase {n + 1}",
-                "duration_seconds": 30,
-                "capture_interval_ms": 100,
+                "duration_seconds": 0,
+                "capture_interval_ms": None,
                 "instructions": "",
+                "record_video": False,
+                "record_audio": False,
+                "record_gopro": False,
+                "allow_pause": False,
+                "cameras": [],
             }
         )
         self._rebuild_phases()
@@ -798,7 +1054,62 @@ class CaptureExpertApp(ctk.CTk):
         self._update_summary()
 
     # ==========================================================================
-    #  Actions (Run Experiment / Calibrate / Undistort)
+    #  Video Player Controls
+    # ==========================================================================
+
+    def _show_video_player(self, allow_pause=True, message=""):
+        """Show the video player panel in the experiment tab."""
+        self._video_player_visible = True
+        self._video_allow_pause = allow_pause
+        self._vp_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
+        self._vp_message.configure(text=message)
+        self._vp_pause_btn.configure(state="normal" if allow_pause else "disabled")
+        self._vp_recording_label.configure(text="REC" if allow_pause else "")
+
+    def _hide_video_player(self):
+        """Hide the video player panel."""
+        self._video_player_visible = False
+        self._vp_frame.grid_forget()
+        self._vp_canvas.configure(text="No video", image=None)
+
+    def _vp_play(self):
+        """User clicked Play."""
+        self._user_action_queue.put({"type": "play"})
+
+    def _vp_pause(self):
+        """User clicked Pause."""
+        if self._video_allow_pause:
+            self._user_action_queue.put({"type": "pause"})
+
+    def _vp_continue(self):
+        """User clicked Continue (advance to next phase)."""
+        self._user_action_queue.put({"type": "continue"})
+
+    def _update_video_frame(self, frame):
+        """Display a video frame in the player canvas."""
+        if PILImage is None:
+            return
+        try:
+            import cv2
+            # BGR -> RGB
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = PILImage.fromarray(rgb)
+            img = img.resize((VIDEO_DISPLAY_WIDTH, VIDEO_DISPLAY_HEIGHT), PILImage.LANCZOS)
+            ctk_img = ctk.CTkImage(light_image=img, dark_image=img,
+                                   size=(VIDEO_DISPLAY_WIDTH, VIDEO_DISPLAY_HEIGHT))
+            self._vp_canvas.configure(image=ctk_img, text="")
+            self._vp_canvas._ctk_image = ctk_img  # prevent GC
+        except Exception:
+            pass
+
+    def _update_video_time(self, position_sec, duration_sec):
+        """Update the video time display."""
+        pos_m, pos_s = divmod(int(position_sec), 60)
+        dur_m, dur_s = divmod(int(duration_sec), 60)
+        self._vp_time_label.configure(text=f"{pos_m}:{pos_s:02d} / {dur_m}:{dur_s:02d}")
+
+    # ==========================================================================
+    #  Actions (Run Experiment / Calibrate / Undistort / Mic Test)
     # ==========================================================================
 
     def _run_experiment(self):
@@ -810,6 +1121,18 @@ class CaptureExpertApp(ctk.CTk):
         self._progress_label.configure(text="Starting experiment...")
         self._progress_bar.set(0)
 
+        # Clear event queues
+        while not self._gui_event_queue.empty():
+            try:
+                self._gui_event_queue.get_nowait()
+            except queue.Empty:
+                break
+        while not self._user_action_queue.empty():
+            try:
+                self._user_action_queue.get_nowait()
+            except queue.Empty:
+                break
+
         def worker():
             old_stdout, old_stderr = sys.stdout, sys.stderr
             sys.stdout = OutputRedirector(self.output_queue, "stdout")
@@ -817,18 +1140,25 @@ class CaptureExpertApp(ctk.CTk):
             try:
                 from src.experiment import Experiment
 
-                exp = Experiment(self.settings)
+                exp = Experiment(
+                    self.settings,
+                    gui_event_queue=self._gui_event_queue,
+                    user_action_queue=self._user_action_queue,
+                )
                 self._active_experiment = exp
                 exp.run()
             except KeyboardInterrupt:
                 pass
             except Exception as e:
                 self.output_queue.put(("stderr", f"ERROR: {e}"))
+                import traceback
+                self.output_queue.put(("stderr", traceback.format_exc()))
             finally:
                 sys.stdout, sys.stderr = old_stdout, old_stderr
                 self._active_experiment = None
                 self.after(0, lambda: self._set_running(False))
                 self.after(0, lambda: self._progress_label.configure(text="Experiment finished."))
+                self.after(0, self._hide_video_player)
 
         self._worker_thread = threading.Thread(target=worker, daemon=True)
         self._worker_thread.start()
@@ -865,7 +1195,7 @@ class CaptureExpertApp(ctk.CTk):
     def _run_undistort(self):
         if self._is_running:
             return
-        input_path = self._undist_w["input"].get().strip()
+        input_path = self._cal_w["input"].get().strip()
         if not input_path:
             messagebox.showwarning("No Input", "Please select a video file or folder.")
             return
@@ -903,19 +1233,125 @@ class CaptureExpertApp(ctk.CTk):
         self._worker_thread = threading.Thread(target=worker, daemon=True)
         self._worker_thread.start()
 
-    def _stop_experiment(self):
-        if not self._is_running or self._worker_thread is None:
+    def _run_multicam_calibration(self):
+        """Run multi-camera calibration on uploaded GoPro files."""
+        if self._is_running:
             return
-        self._log("Stopping... (sending interrupt)")
-        self._progress_label.configure(text="Stopping...")
-        try:
-            thread_id = self._worker_thread.ident
-            if thread_id is not None:
-                ctypes.pythonapi.PyThreadState_SetAsyncExc(
-                    ctypes.c_ulong(thread_id), ctypes.py_object(KeyboardInterrupt)
+
+        files = []
+        for entry in self._cal_w["gopro_files"]:
+            path = entry.get().strip()
+            if path and Path(path).exists():
+                files.append(path)
+
+        if len(files) < 1:
+            messagebox.showwarning("No Files", "Please select at least one GoPro video file.")
+            return
+
+        self._clear_console()
+        self._set_running(True)
+        self._progress_label.configure(text="Running multi-camera calibration...")
+
+        def worker():
+            old_stdout, old_stderr = sys.stdout, sys.stderr
+            sys.stdout = OutputRedirector(self.output_queue, "stdout")
+            sys.stderr = OutputRedirector(self.output_queue, "stderr")
+            try:
+                from src.extrinsic_calibration import calibrate_all, save_calibration_log
+
+                result = calibrate_all(files)
+                output_dir = Path(files[0]).parent
+                save_calibration_log(result, str(output_dir / "calibration_log.json"))
+                self.output_queue.put(("stdout", "\nCalibration complete!"))
+            except Exception as e:
+                self.output_queue.put(("stderr", f"ERROR: {e}"))
+            finally:
+                sys.stdout, sys.stderr = old_stdout, old_stderr
+                self.after(0, lambda: self._set_running(False))
+                self.after(0, lambda: self._progress_label.configure(text="Calibration complete."))
+
+        self._worker_thread = threading.Thread(target=worker, daemon=True)
+        self._worker_thread.start()
+
+    def _test_microphone(self):
+        """Quick microphone test: record 1 second and check for signal."""
+        if self._is_running:
+            return
+
+        self._clear_console()
+        self._log("Testing microphone...")
+
+        def worker():
+            old_stdout, old_stderr = sys.stdout, sys.stderr
+            sys.stdout = OutputRedirector(self.output_queue, "stdout")
+            sys.stderr = OutputRedirector(self.output_queue, "stderr")
+            try:
+                from src.audio import AudioConfig, AudioRecorder, find_audio_device
+                import tempfile
+
+                name = self._mic_w["device_name"].get().strip() or "Tonor"
+                idx_str = self._mic_w["device_index"].get().strip()
+                device_idx = int(idx_str) if idx_str else None
+
+                if device_idx is None:
+                    device_idx = find_audio_device(name)
+                    if device_idx is None:
+                        print(f"Microphone '{name}' not found!")
+                        return
+                    print(f"Found device: index {device_idx}")
+
+                config = AudioConfig(
+                    device_name=name,
+                    device_index=device_idx,
+                    sample_rate=44100,
+                    channels=1,
                 )
-        except Exception as e:
-            self._log(f"Stop error: {e}")
+                recorder = AudioRecorder(config)
+                tmp = tempfile.mktemp(suffix=".wav")
+                if recorder.open(tmp):
+                    recorder.start_recording()
+                    time.sleep(1.0)
+                    recorder.stop_recording()
+                    recorder.close()
+
+                    import os
+                    size = os.path.getsize(tmp)
+                    if size > 1000:
+                        print(f"Microphone test PASSED ({size} bytes recorded)")
+                    else:
+                        print(f"Microphone test FAILED (only {size} bytes)")
+                    os.unlink(tmp)
+                else:
+                    print("Failed to open microphone")
+            except Exception as e:
+                self.output_queue.put(("stderr", f"Mic test error: {e}"))
+            finally:
+                sys.stdout, sys.stderr = old_stdout, old_stderr
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _stop_experiment(self):
+        if not self._is_running:
+            return
+        self._log("Stopping... (sending stop signal)")
+        self._progress_label.configure(text="Stopping...")
+
+        # Send stop via action queue first
+        self._user_action_queue.put({"type": "stop"})
+
+        # Fallback: async exception after a short delay
+        def force_stop():
+            if self._is_running and self._worker_thread is not None:
+                try:
+                    thread_id = self._worker_thread.ident
+                    if thread_id is not None:
+                        ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                            ctypes.c_ulong(thread_id), ctypes.py_object(KeyboardInterrupt)
+                        )
+                except Exception as e:
+                    self._log(f"Stop error: {e}")
+
+        self.after(2000, force_stop)
 
     def _set_running(self, running):
         self._is_running = running
@@ -925,14 +1361,92 @@ class CaptureExpertApp(ctk.CTk):
             self._run_btn.configure(state=state_off)
             self._cal_btn.configure(state=state_off)
             self._undist_btn.configure(state=state_off)
+            self._run_cal_btn.configure(state=state_off)
             self._stop_btn.configure(state=state_on)
             self._status_label.configure(text="Running...", text_color=CLR_GREEN)
         else:
             self._run_btn.configure(state=state_on)
             self._cal_btn.configure(state=state_on)
             self._undist_btn.configure(state=state_on)
+            self._run_cal_btn.configure(state=state_on)
             self._stop_btn.configure(state=state_off)
             self._status_label.configure(text="Ready", text_color="white")
+
+    # ==========================================================================
+    #  GUI Event Polling (experiment -> GUI)
+    # ==========================================================================
+
+    def _poll_gui_events(self):
+        """Process events from the experiment thread."""
+        try:
+            while True:
+                event = self._gui_event_queue.get_nowait()
+                self._handle_gui_event(event)
+        except queue.Empty:
+            pass
+        self.after(50, self._poll_gui_events)
+
+    def _handle_gui_event(self, event):
+        """Handle a single event from the experiment."""
+        etype = event.get("type")
+
+        if etype == "phase_change":
+            idx = event.get("phase_index", 0)
+            total = event.get("total_phases", 1)
+            name = event.get("phase_name", "")
+            self._phase_indicator.configure(
+                text=f"Phase {idx + 1}/{total}: {name}"
+            )
+            self._progress_bar.set((idx + 1) / total if total > 0 else 0)
+
+        elif etype == "show_video_player":
+            self._show_video_player(
+                allow_pause=event.get("allow_pause", True),
+                message=event.get("message", ""),
+            )
+
+        elif etype == "hide_video_player":
+            self._hide_video_player()
+
+        elif etype == "video_frame":
+            frame = event.get("frame")
+            if frame is not None:
+                self._update_video_frame(frame)
+            pos = event.get("position_sec", 0)
+            dur = event.get("duration_sec", 0)
+            self._update_video_time(pos, dur)
+
+        elif etype == "player_progress":
+            pos = event.get("position_sec", 0)
+            dur = event.get("duration_sec", 0)
+            self._update_video_time(pos, dur)
+
+        elif etype == "video_complete":
+            self._vp_canvas.configure(text="Video complete")
+
+        elif etype == "wait_for_continue":
+            msg = event.get("message", "Press Continue to proceed.")
+            self._progress_label.configure(text=msg)
+
+        elif etype == "recording_status":
+            if event.get("recording"):
+                self._vp_recording_label.configure(text="REC")
+            else:
+                self._vp_recording_label.configure(text="")
+
+        elif etype == "status":
+            msg = event.get("message", "")
+            self._progress_label.configure(text=msg)
+
+        elif etype == "request_gopro_upload":
+            msg = event.get("message", "Upload GoPro footage.")
+            self._progress_label.configure(text=msg)
+            # Switch to calibration tab to allow file selection
+            self.tabview.set("Calibration")
+
+        elif etype == "experiment_complete":
+            self._progress_label.configure(text="Experiment complete!")
+            self._hide_video_player()
 
     # ==========================================================================
     #  Console

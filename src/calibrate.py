@@ -25,6 +25,7 @@ class CalibrationTool:
         self._check_cameras()
         self._check_gopros()
         self._check_heart_rate()
+        self._check_microphone()
         self._print_summary()
 
         all_passed = all(r["status"] == "PASS" for r in self._results)
@@ -182,6 +183,94 @@ class CalibrationTool:
         })
 
         monitor.disconnect()
+
+    def _check_microphone(self):
+        """Check that the configured USB microphone can record audio."""
+        mic_settings = self.settings.get("microphone", {})
+        if not mic_settings.get("enabled", False):
+            print("\nMicrophone: Disabled in config.")
+            return
+
+        print("\n--- Microphone ---")
+
+        try:
+            from .audio import AudioConfig, AudioRecorder, find_audio_device
+            import tempfile
+            import os
+
+            device_name = mic_settings.get("device_name", "Tonor")
+            device_index = mic_settings.get("device_index")
+
+            if device_index is None:
+                device_index = find_audio_device(device_name)
+
+            if device_index is None:
+                print(f"  Microphone '{device_name}': FAIL - device not found")
+                self._results.append({
+                    "device": f"Microphone ({device_name})",
+                    "type": "Audio",
+                    "status": "FAIL",
+                    "detail": "device not found",
+                })
+                return
+
+            config = AudioConfig(
+                device_name=device_name,
+                device_index=device_index,
+                sample_rate=mic_settings.get("sample_rate", 44100),
+                channels=mic_settings.get("channels", 1),
+            )
+            recorder = AudioRecorder(config)
+            tmp_path = tempfile.mktemp(suffix=".wav")
+            opened = recorder.open(tmp_path)
+            has_signal = False
+
+            if opened:
+                recorder.start_recording()
+                import time
+                time.sleep(1.0)
+                recorder.stop_recording()
+                recorder.close()
+                size = os.path.getsize(tmp_path)
+                has_signal = size > 1000
+                os.unlink(tmp_path)
+            else:
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+
+            detail = []
+            if opened:
+                detail.append(f"device {device_index}")
+                detail.append("signal detected" if has_signal else "no signal")
+            else:
+                detail.append("failed to open")
+
+            status = "PASS" if opened and has_signal else "FAIL"
+            print(f"  Microphone ({device_name}): {status} - {', '.join(detail)}")
+
+            self._results.append({
+                "device": f"Microphone ({device_name})",
+                "type": "Audio",
+                "status": status,
+                "detail": ", ".join(detail),
+            })
+
+        except ImportError:
+            print("  Microphone: SKIP - sounddevice/soundfile not installed")
+            self._results.append({
+                "device": "Microphone",
+                "type": "Audio",
+                "status": "SKIP",
+                "detail": "sounddevice/soundfile not installed",
+            })
+        except Exception as e:
+            print(f"  Microphone: FAIL - {e}")
+            self._results.append({
+                "device": "Microphone",
+                "type": "Audio",
+                "status": "FAIL",
+                "detail": str(e),
+            })
 
     def _print_summary(self):
         """Print a formatted summary table."""

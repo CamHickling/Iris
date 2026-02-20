@@ -19,6 +19,15 @@ class PhaseConfig:
     duration_seconds: float
     capture_interval_ms: Optional[int]
     instructions: str
+    record_video: bool = False
+    record_audio: bool = False
+    record_gopro: bool = False
+    allow_pause: bool = False
+    cameras: list[str] = None
+
+    def __post_init__(self):
+        if self.cameras is None:
+            self.cameras = []
 
 
 class Phase:

@@ -12,3 +12,19 @@ goprocam_mock = MagicMock()
 sys.modules["goprocam"] = goprocam_mock
 sys.modules["goprocam.GoProCamera"] = goprocam_mock.GoProCamera
 sys.modules["goprocam.constants"] = goprocam_mock.constants
+
+# Mock sounddevice and soundfile
+sounddevice_mock = MagicMock()
+sys.modules["sounddevice"] = sounddevice_mock
+
+soundfile_mock = MagicMock()
+sys.modules["soundfile"] = soundfile_mock
+
+# Mock ffmpeg-python
+ffmpeg_mock = MagicMock()
+sys.modules["ffmpeg"] = ffmpeg_mock
+
+# Mock PIL
+pil_mock = MagicMock()
+sys.modules["PIL"] = pil_mock
+sys.modules["PIL.Image"] = pil_mock.Image

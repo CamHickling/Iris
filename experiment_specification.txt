@@ -1,0 +1,19 @@
+Name this particular Collection Project in our Tool as "Taekwondo Experiment"
+
+Beginning Phase 1. The participant walks into the room
+
+Heart Rate Phase 2. Immediately they put on the polar heart rate monitor and we will begin recording. We will recording for the whole duration of the session.
+
+Warm Up / Camera Calibration Phase 3. Next the participant performs warm up movements to get ready for their performance, during this time we run calibration on all cameras and the tonor microphone to make sure everything is ready to go. Lastly we begin recording and will ask the participant to T-pose in order to make sure we have a good basis for tracking limbs in posthoc motion capture analysis. remind the user of GUI to perform the intrinsic and extrinsic calibration for the go pros.
+
+Performance Phase 4. They will then begin their motion performance which we will record using both the overhead camera and the two go pros. start all cameras at the same time. 
+
+Review Phase 5. Once their performance is finished, please record using the face camera as they will now sit down and watch back their footage of the overhead camera. During this time when the participant watched back their own footage in the gui, they should be able to pause and play their performance video as it plays through oce they click to begin. want the face camera to be recorded as well as the tonor microphone. Their heart rate should still be being recorded as it will be the whole session. At the end a version of this video with their voiceover should be saved to file. Make sure that their voice comments line up with the part of the video they were watching, which may involve inserting paused frames while the participant is narrating the paused video.
+
+Scoring Phase 6. Next they watch back their video again, this time with no pausing. please still record the face and heart rate
+
+Finish Experiment Phase 7. Please make sure all of the experiment files are saved including the original videos from the overhead camera and face camera. Please make sure there is a version of the overhead video which has the commentary overtop as recorded in the review phase, a version of the face video which has the hr data synced to it. The whole whack of hr data broadly for the session. Please save a version of the scoring phase face cam footage with the hr footage synced. Please make sure that the \
+
+Post-hoc Calibration Tool Phase 8. Please prompt the use to upload the go pro footage from the cameras in an easy way. save these to file. optionally allow the user to indicate if they want to immediately run intrinsic (len correction) and extrinsic (go pro camera view figure out where they are relative to each other) calibration. Please a copy of all new calibrated footage, and save the log information for the correction coeffients used for each video intrinsically and also the log information for the extrinsic calibration to be used later with motion capture post-hoc analysis.
+
+(Optional) NLF Motion Capture Analysis Phase 9. Please make a pipeline for "C:\Users\BarlabPRIME\Desktop\Martial_arts_nlf-pose" to be used on the videos after. please just leave this as unspecified and will not run any code but just a unspecified last optional and coming soon step. 
