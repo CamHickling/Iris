@@ -68,6 +68,7 @@ class PolarH10:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._connected = threading.Event()
         self._stop_event = threading.Event()
+        self._connection_ok = False  # True only after stable connection confirmed
 
     @staticmethod
     def _parse_hr_measurement(data: bytearray) -> dict:
@@ -182,7 +183,9 @@ class PolarH10:
         print(f"Found Polar H10: {device.name} [{device.address}]")
 
         def on_disconnect(client):
-            print(f"WARNING: Polar H10 disconnected ({client.address})")
+            self._connection_ok = False
+            if not self._stop_event.is_set():
+                print(f"WARNING: Polar H10 disconnected ({client.address})")
 
         self._client = BleakClient(device, disconnected_callback=on_disconnect)
         await self._client.connect()
@@ -200,29 +203,36 @@ class PolarH10:
         await self._client.start_notify(HR_MEASUREMENT_UUID, self._hr_callback)
         print("Subscribed to heart rate notifications")
 
+        # Small delay to let HR subscription stabilize before ECG
+        await asyncio.sleep(1.0)
+
+        if not self._client.is_connected:
+            print("WARNING: Connection dropped after HR subscription")
+            return False
+
         # Optionally start ECG streaming
         if self.ecg_enabled:
             try:
                 await self._client.start_notify(PMD_DATA_UUID, self._ecg_callback)
+                await asyncio.sleep(0.5)
                 await self._client.write_gatt_char(PMD_CONTROL_UUID, ECG_START, response=True)
                 print("ECG streaming started (130 Hz, 14-bit)")
             except Exception as e:
                 print(f"WARNING: ECG streaming failed: {e}")
                 self.ecg_enabled = False
 
+        # Stabilization: confirm connection holds for 2 seconds after all subscriptions
+        await asyncio.sleep(2.0)
+        if not self._client.is_connected:
+            print("WARNING: Connection dropped during stabilization")
+            return False
+
+        print("Polar H10 connection stable")
+        self._connection_ok = True
         return True
 
-    async def _run_loop(self):
-        """Main async loop keeping the BLE connection alive."""
-        connected = await self._connect_and_subscribe()
-        self._connected.set()
-        if not connected:
-            return
-
-        while not self._stop_event.is_set():
-            await asyncio.sleep(0.1)
-
-        # Cleanup
+    async def _cleanup_client(self):
+        """Safely disconnect and clean up the BLE client."""
         if self._client and self._client.is_connected:
             if self.ecg_enabled:
                 try:
@@ -236,7 +246,54 @@ class PolarH10:
                 await self._client.stop_notify(HR_MEASUREMENT_UUID)
             except Exception:
                 pass
-            await self._client.disconnect()
+            try:
+                await self._client.disconnect()
+            except Exception:
+                pass
+
+    async def _run_loop(self):
+        """Main async loop keeping the BLE connection alive with retry."""
+        max_attempts = 3
+
+        for attempt in range(1, max_attempts + 1):
+            if self._stop_event.is_set():
+                break
+
+            if attempt > 1:
+                print(f"\nPolar H10 connection attempt {attempt}/{max_attempts}...")
+                await asyncio.sleep(2.0)
+
+            connected = await self._connect_and_subscribe()
+
+            if attempt == 1:
+                # Signal connect() on first attempt regardless of result
+                self._connected.set()
+
+            if not connected:
+                await self._cleanup_client()
+                continue
+
+            # Connection succeeded — signal if this was a retry
+            if attempt > 1:
+                self._connected.set()
+
+            # Stay alive while connected
+            while not self._stop_event.is_set():
+                if not self._connection_ok:
+                    # Connection dropped unexpectedly
+                    break
+                await asyncio.sleep(0.1)
+
+            if self._stop_event.is_set():
+                # Intentional shutdown
+                break
+
+            # Unexpected disconnect — clean up and retry
+            print("Polar H10 lost connection, will retry...")
+            await self._cleanup_client()
+
+        # Final cleanup
+        await self._cleanup_client()
 
     def _thread_target(self):
         """Thread target running the async event loop."""
@@ -248,16 +305,27 @@ class PolarH10:
     def connect(self) -> bool:
         """Connect to the Polar H10 in a background thread.
 
-        Returns True if connection was successful.
+        Retries up to 3 times if the connection drops during setup.
+        Returns True if a stable connection was established.
         """
         self._stop_event.clear()
         self._connected.clear()
+        self._connection_ok = False
         self._thread = threading.Thread(target=self._thread_target, daemon=True)
         self._thread.start()
 
-        self._connected.wait(timeout=25.0)
-        time.sleep(0.5)
-        return self._client is not None and self._client.is_connected
+        # Wait for first attempt result (includes stabilization time)
+        self._connected.wait(timeout=45.0)
+
+        # Give retries a chance if first attempt failed
+        if not self._connection_ok:
+            # Wait additional time for retry attempts (up to 2 more retries)
+            for _ in range(20):
+                if self._connection_ok or self._stop_event.is_set():
+                    break
+                time.sleep(1.0)
+
+        return self._connection_ok
 
     def start_recording(self, phase: str):
         """Start recording data, labeling samples with the given phase."""

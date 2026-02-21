@@ -45,7 +45,8 @@
       "Bash(powershell.exe -NoProfile -Command 'Start-Process netsh -ArgumentList \"\"interface ip set address `\"\"WiFi 5`\"\" static 10.5.5.100 255.255.255.0 10.5.5.9\"\" -Verb RunAs -Wait')",
       "Bash(powershell.exe -NoProfile -Command 'Get-NetIPAddress -InterfaceIndex 32 -AddressFamily IPv4 | Format-List IPAddress,PrefixLength')",
       "Bash(git push:*)",
-      "Bash(pip uninstall:*)"
+      "Bash(pip uninstall:*)",
+      "Bash(powershell -Command \"Get-PnpDevice -Class Camera -Status OK | Format-Table Name, InstanceId -AutoSize\")"
     ]
   }
 }

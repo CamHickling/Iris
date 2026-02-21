@@ -17,6 +17,8 @@ class CameraConfig:
     fps: int
     enabled: bool
     role: Optional[str] = None
+    actual_resolution: Optional[tuple[int, int]] = None
+    actual_fps: Optional[float] = None
 
 
 class Camera:
@@ -51,11 +53,19 @@ class Camera:
         # Set buffer size to minimize latency
         self._capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-        # Report actual resolution (may differ from requested)
+        # Store actual resolution (may differ from requested)
         actual_w = int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         actual_h = int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
         actual_fps = self._capture.get(cv2.CAP_PROP_FPS)
         actual_zoom = self._capture.get(cv2.CAP_PROP_ZOOM)
+        self.config.actual_resolution = (actual_w, actual_h)
+        self.config.actual_fps = actual_fps
+
+        if (actual_w, actual_h) != self.config.resolution:
+            print(f"WARNING: {self.config.name} resolution mismatch! "
+                  f"Requested {self.config.resolution[0]}x{self.config.resolution[1]}, "
+                  f"got {actual_w}x{actual_h}. Using actual resolution for recording.")
+
         print(f"Opened camera: {self.config.name} "
               f"(requested {self.config.resolution[0]}x{self.config.resolution[1]}, "
               f"actual {actual_w}x{actual_h}, fps={actual_fps:.0f}, zoom={actual_zoom})")
@@ -122,6 +132,14 @@ class CameraManager:
             if frame is not None:
                 frames[cam_id] = frame
         return frames
+
+    def assign_roles(self, role_map: dict[str, str]):
+        """Update camera roles from a {camera_id: role} mapping."""
+        for cam_id, role in role_map.items():
+            if cam_id in self.cameras:
+                self.cameras[cam_id].config.role = role
+                print(f"Assigned role '{role}' to camera '{self.cameras[cam_id].config.name}' "
+                      f"(device {self.cameras[cam_id].config.device_index})")
 
     def get_camera_by_role(self, role: str) -> Optional["Camera"]:
         """Find the first camera with the given role."""
