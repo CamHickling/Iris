@@ -1,7 +1,8 @@
 """Experiment state machine and main loop.
 
-9-phase Taekwondo experiment flow with video recording, audio capture,
-video playback, compositing, and multi-camera calibration.
+7-phase Taekwondo experiment flow with video recording, audio capture,
+video playback, and compositing. Post-hoc calibration is available
+separately from the Calibration tab.
 """
 
 import json
@@ -10,20 +11,15 @@ import time
 from pathlib import Path
 from typing import Optional
 
-import cv2
-
 from .audio import AudioConfig, AudioRecorder
 from .camera import CameraManager
 from .compositing import (
     check_ffmpeg,
     create_hr_synced_video,
     create_review_composite,
-    overlay_audio_on_video,
 )
-from .extrinsic_calibration import calibrate_all, save_calibration_log
 from .gopro import GoProManager
 from .heart_rate import PolarH10
-from .lens_correct import calibrate_from_video, correct_video
 from .phase import Phase, PhaseConfig, PhaseStatus
 from .utils import timestamp_string
 from .video_player import PlayerState, VideoPlayer
@@ -81,8 +77,8 @@ class Experiment:
 
         self._skip_remaining = False
 
-        # GoPro footage paths (uploaded by user in posthoc phase)
-        self._gopro_footage: list[str] = []
+        # Persistent recorder for overhead camera (spans calibration -> performance)
+        self._overhead_recorder: Optional["VideoRecorder"] = None
 
     def _load_phases(self, phase_configs: list[dict]) -> list[Phase]:
         phases = []
@@ -166,6 +162,12 @@ class Experiment:
     def teardown(self):
         """Clean up all resources."""
         print("\n--- Tearing Down Experiment ---")
+
+        # Stop overhead recorder if still active (safety net)
+        if self._overhead_recorder:
+            print("Stopping overhead recorder...")
+            self._overhead_recorder.stop()
+            self._overhead_recorder = None
 
         # Stop Polar H10 recording and save data
         if self.hr_monitor:
@@ -259,6 +261,21 @@ class Experiment:
         if not self.camera_manager.open_all():
             print("WARNING: Some USB cameras failed to connect")
 
+        # Start overhead camera recording (continuous through performance)
+        overhead_cam = self.camera_manager.get_camera_by_role("overhead")
+        if overhead_cam is None:
+            print("WARNING: No overhead camera found, using first available")
+            if self.camera_manager.cameras:
+                overhead_cam = next(iter(self.camera_manager.cameras.values()))
+
+        overhead_path = str(self._session_dir / "performance" / "overhead_camera.mp4")
+        if overhead_cam and overhead_cam.is_open:
+            self._overhead_recorder = VideoRecorder(
+                overhead_cam, overhead_path, fps=overhead_cam.config.fps
+            )
+            self._overhead_recorder.start()
+            print(f"Overhead recording started (continuous through performance)")
+
         # Test microphone
         if self.mic_enabled:
             print("\n--- Testing Microphone ---")
@@ -304,12 +321,15 @@ class Experiment:
             if action.get("type") == "stop":
                 if self.gopro_mode == "auto":
                     self.gopro_manager.stop_recording_all()
+                if self._overhead_recorder:
+                    self._overhead_recorder.stop()
+                    self._overhead_recorder = None
                 self._send_gui_event("recording_status", recording=False)
                 raise KeyboardInterrupt("User stopped experiment")
             if action.get("type") == "continue":
                 break
 
-        # Stop GoPro recording after calibration
+        # Stop GoPro recording after calibration (overhead keeps recording)
         if self.gopro_mode == "auto":
             print("\n--- Stopping GoPro Recording (Calibration) ---")
             self.gopro_manager.stop_recording_all()
@@ -320,28 +340,24 @@ class Experiment:
         phase.complete()
 
     def _run_performance(self, phase: Phase):
-        """Phase 4: Record overhead video + GoPros simultaneously."""
+        """Phase 4: Record overhead video + GoPros simultaneously.
+
+        Overhead camera recording was started in warmup_calibration and continues here.
+        """
         if self.hr_monitor and self.hr_enabled:
             self.hr_monitor.set_phase("performance")
-
-        overhead_cam = self.camera_manager.get_camera_by_role("overhead")
-        if overhead_cam is None:
-            print("WARNING: No overhead camera found, using first available")
-            if self.camera_manager.cameras:
-                overhead_cam = next(iter(self.camera_manager.cameras.values()))
-
-        overhead_path = str(self._session_dir / "performance" / "overhead_camera.mp4")
-        recorder = None
-
-        if overhead_cam and overhead_cam.is_open:
-            recorder = VideoRecorder(overhead_cam, overhead_path, fps=overhead_cam.config.fps)
-            recorder.start()
 
         # Start GoPro recording
         if self.gopro_mode == "auto":
             self.gopro_manager.start_recording_all()
         else:
             print("MANUAL MODE: Ensure GoPros are recording.")
+
+        recording_active = self._overhead_recorder is not None
+        if recording_active:
+            print("Overhead camera continuing to record (started in calibration)")
+        else:
+            print("WARNING: No overhead recorder active")
 
         self._send_gui_event("wait_for_continue", message="Recording in progress. Press Continue when done.")
         self._send_gui_event("recording_status", recording=True, cameras=["overhead"], gopros=True)
@@ -360,9 +376,11 @@ class Experiment:
                     raise KeyboardInterrupt("User stopped experiment")
                 break
 
-        # Stop recording
-        if recorder:
-            recorder.stop()
+        # Stop overhead recording (was running since warmup_calibration)
+        if self._overhead_recorder:
+            self._overhead_recorder.stop()
+            self._overhead_recorder = None
+
         if self.gopro_mode == "auto":
             self.gopro_manager.stop_recording_all()
         else:
@@ -489,12 +507,13 @@ class Experiment:
         phase.complete()
 
     def _run_scoring(self, phase: Phase):
-        """Phase 6: Play overhead video (no pause), record face cam."""
+        """Phase 6: Play overhead video (no pause), record face cam + audio."""
         if self.hr_monitor and self.hr_enabled:
             self.hr_monitor.set_phase("scoring")
 
         overhead_path = str(self._session_dir / "performance" / "overhead_camera.mp4")
         face_video_path = str(self._session_dir / "scoring" / "face_cam.mp4")
+        audio_path = str(self._session_dir / "scoring" / "audio_scoring.wav")
 
         # Set up video player
         player = VideoPlayer(overhead_path)
@@ -509,6 +528,15 @@ class Experiment:
         if face_cam and face_cam.is_open:
             face_recorder = VideoRecorder(face_cam, face_video_path, fps=face_cam.config.fps)
             face_recorder.start()
+
+        # Set up audio recorder
+        audio_recorder = None
+        if self.mic_enabled:
+            audio_recorder = AudioRecorder(self.mic_config)
+            if audio_recorder.open(audio_path):
+                audio_recorder.start_recording()
+            else:
+                audio_recorder = None
 
         def on_frame(frame, position_sec):
             self._send_gui_event("video_frame", frame=frame, position_sec=position_sec,
@@ -558,6 +586,9 @@ class Experiment:
         player.close()
         if face_recorder:
             face_recorder.stop()
+        if audio_recorder:
+            audio_recorder.stop_recording()
+            audio_recorder.close()
 
         self._send_gui_event("hide_video_player")
         phase.complete()
@@ -614,9 +645,9 @@ class Experiment:
 
         print("Post-processing complete.")
 
-        # Ask user: end now or continue to post-hoc calibration?
+        # Ask user: end now or go to calibration tab?
         self._send_gui_event("experiment_done_choice")
-        print("Waiting for user choice: end experiment or post-hoc calibration...")
+        print("Waiting for user choice...")
         while True:
             try:
                 action = self._user_action_queue.get(timeout=0.5)
@@ -624,88 +655,21 @@ class Experiment:
                 continue
             if action.get("type") == "stop":
                 raise KeyboardInterrupt("User stopped experiment")
-            if action.get("type") == "end_experiment":
-                print("User chose to end experiment.")
+            if action.get("type") in ("end_experiment", "continue_posthoc"):
+                if action.get("type") == "continue_posthoc":
+                    print("User chose to open Calibration tab after ending.")
+                else:
+                    print("User chose to end experiment.")
                 self._skip_remaining = True
                 phase.complete()
                 return
-            if action.get("type") == "continue_posthoc":
-                print("User chose to continue to post-hoc calibration.")
-                phase.complete()
-                return
-
-    def _run_posthoc_calibration(self, phase: Phase):
-        """Phase 8: GoPro upload dialog, run calibration, save results."""
-        self._send_gui_event("request_gopro_upload",
-                             message="Upload GoPro footage for calibration.")
-
-        # Wait for user to upload files or skip
-        print("Waiting for GoPro footage upload...")
-        while True:
-            try:
-                action = self._user_action_queue.get(timeout=1.0)
-            except queue.Empty:
-                continue
-            if action.get("type") == "stop":
-                raise KeyboardInterrupt("User stopped experiment")
-            if action.get("type") == "gopro_files":
-                self._gopro_footage = action.get("files", [])
-                break
-            if action.get("type") == "continue":
-                break
-
-        # Copy GoPro files to session dir
-        gopro_dir = self._session_dir / "gopro_footage"
-        import shutil
-        video_paths = []
-        for src_path in self._gopro_footage:
-            dst = gopro_dir / Path(src_path).name
-            if not dst.exists():
-                shutil.copy2(src_path, dst)
-            video_paths.append(str(dst))
-            print(f"GoPro footage: {src_path} -> {dst}")
-
-        cal_settings = self.settings.get("calibration", {})
-
-        if video_paths and (cal_settings.get("run_intrinsic", True) or
-                            cal_settings.get("run_extrinsic", True)):
-            print("\n--- Running Calibration ---")
-            cal_dir = self._session_dir / "calibration"
-
-            if cal_settings.get("run_intrinsic", True):
-                # Run intrinsic + correction per video
-                for vpath in video_paths:
-                    result = calibrate_from_video(vpath)
-                    if result:
-                        K, D, frame_size = result
-                        corrected_path = correct_video(vpath, K, D, frame_size)
-                        # Move corrected to calibration dir
-                        corrected = Path(corrected_path)
-                        dst = cal_dir / corrected.name
-                        corrected.rename(dst)
-                        print(f"Corrected video: {dst}")
-
-            if cal_settings.get("run_extrinsic", True) and len(video_paths) >= 2:
-                calibrations = calibrate_all(video_paths)
-                save_calibration_log(calibrations, str(cal_dir / "calibration_log.json"))
-        else:
-            print("Skipping calibration (no footage or disabled in settings)")
-
-        phase.complete()
-
-    def _run_nlf_mocap(self, phase: Phase):
-        """Phase 9: Placeholder for future NLF MoCap integration."""
-        print("\n--- NLF Motion Capture ---")
-        print("Coming Soon: Neural Lifting for Motion Capture")
-        print("This phase will integrate markerless motion capture in a future update.")
-        phase.complete()
 
     # ======================================================================
     #  Main Loop
     # ======================================================================
 
     def run(self):
-        """Main experiment loop with 9 phases."""
+        """Main experiment loop."""
         if not self.setup():
             print("Setup failed!")
             return
@@ -737,8 +701,6 @@ class Experiment:
                     "review": self._run_review,
                     "scoring": self._run_scoring,
                     "finish": self._run_finish,
-                    "posthoc_calibration": self._run_posthoc_calibration,
-                    "nlf_mocap": self._run_nlf_mocap,
                 }.get(phase_id)
 
                 if handler:
