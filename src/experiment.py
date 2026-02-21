@@ -79,6 +79,8 @@ class Experiment:
         self._gui_event_queue = gui_event_queue or queue.Queue()
         self._user_action_queue = user_action_queue or queue.Queue()
 
+        self._skip_remaining = False
+
         # GoPro footage paths (uploaded by user in posthoc phase)
         self._gopro_footage: list[str] = []
 
@@ -611,7 +613,26 @@ class Experiment:
             print("Skipping HR overlay (no HR data)")
 
         print("Post-processing complete.")
-        phase.complete()
+
+        # Ask user: end now or continue to post-hoc calibration?
+        self._send_gui_event("experiment_done_choice")
+        print("Waiting for user choice: end experiment or post-hoc calibration...")
+        while True:
+            try:
+                action = self._user_action_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            if action.get("type") == "stop":
+                raise KeyboardInterrupt("User stopped experiment")
+            if action.get("type") == "end_experiment":
+                print("User chose to end experiment.")
+                self._skip_remaining = True
+                phase.complete()
+                return
+            if action.get("type") == "continue_posthoc":
+                print("User chose to continue to post-hoc calibration.")
+                phase.complete()
+                return
 
     def _run_posthoc_calibration(self, phase: Phase):
         """Phase 8: GoPro upload dialog, run calibration, save results."""
@@ -730,6 +751,8 @@ class Experiment:
                     self._wait_for_user_action("continue")
                     phase.complete()
 
+                if self._skip_remaining:
+                    break
                 if not self.next_phase():
                     break
 
