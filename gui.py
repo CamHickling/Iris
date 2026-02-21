@@ -592,27 +592,10 @@ class IrisApp(ctk.CTk):
         ctrl = ctk.CTkFrame(self._vp_frame, fg_color="transparent")
         ctrl.pack(fill="x", padx=10, pady=(0, 5))
 
-        self._vp_play_btn = ctk.CTkButton(
-            ctrl, text="Play", width=80, height=32,
-            fg_color=CLR_GREEN, hover_color=CLR_GREEN_H,
-            command=self._vp_play,
-        )
-        self._vp_play_btn.pack(side="left", padx=(0, 5))
-
-        self._vp_pause_btn = ctk.CTkButton(
-            ctrl, text="Pause", width=80, height=32,
-            fg_color=CLR_ORANGE, hover_color=CLR_ORANGE_H,
-            command=self._vp_pause,
-        )
-        self._vp_pause_btn.pack(side="left", padx=(0, 10))
-
-        self._vp_time_label = ctk.CTkLabel(ctrl, text="0:00 / 0:00", font=FONT_SMALL)
-        self._vp_time_label.pack(side="left", padx=10)
-
         self._vp_recording_label = ctk.CTkLabel(
             ctrl, text="", font=FONT_SMALL, text_color=CLR_RED
         )
-        self._vp_recording_label.pack(side="right", padx=10)
+        self._vp_recording_label.pack(side="left", padx=10)
 
         self._vp_continue_btn = ctk.CTkButton(
             ctrl, text="Continue", width=100, height=32,
@@ -620,6 +603,23 @@ class IrisApp(ctk.CTk):
             command=self._vp_continue,
         )
         self._vp_continue_btn.pack(side="right", padx=(0, 5))
+
+        self._vp_time_label = ctk.CTkLabel(ctrl, text="0:00 / 0:00", font=FONT_SMALL)
+        self._vp_time_label.pack(side="right", padx=10)
+
+        # Centered play/pause toggle button
+        self._vp_playpause_btn = ctk.CTkButton(
+            ctrl, text="\u25B6  Play", width=220, height=50,
+            font=FONT_BTN,
+            fg_color=CLR_GREEN, hover_color=CLR_GREEN_H,
+            command=self._vp_toggle_playpause,
+        )
+        self._vp_playpause_btn.pack(anchor="center", pady=(0, 2))
+
+        self._vp_spacebar_hint = ctk.CTkLabel(
+            ctrl, text="or press Spacebar", font=FONT_SMALL, text_color="gray50",
+        )
+        self._vp_spacebar_hint.pack(anchor="center")
 
     def _build_vp_indicator(self, parent, label):
         """Build a single device indicator (dot + label) for the video player."""
@@ -1255,12 +1255,10 @@ class IrisApp(ctk.CTk):
         self._experiment_tab.grid_rowconfigure(0, weight=1)
         self._experiment_tab.grid_rowconfigure(1, weight=0)
 
-        # Auto-hide console to maximize video space
+        # Hide console to give video maximum space
+        self._console_was_visible_before_video = self._console_visible
         if self._console_visible:
-            self._console_was_visible_before_video = True
             self._toggle_console()
-        else:
-            self._console_was_visible_before_video = False
 
         self._vp_frame.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
         self._vp_title_label.configure(text=title)
@@ -1278,12 +1276,12 @@ class IrisApp(ctk.CTk):
             )
         else:
             self._vp_canvas.configure(text="Press Play to begin", font=FONT_BODY)
-        # Configure buttons for mode
-        self._vp_play_btn.configure(
-            text="Start" if not allow_pause else "Play",
-            state="normal",
+        # Configure play/pause button
+        start_label = "\u25B6  Start" if not allow_pause else "\u25B6  Play"
+        self._vp_playpause_btn.configure(
+            text=start_label, state="normal",
+            fg_color=CLR_GREEN, hover_color=CLR_GREEN_H,
         )
-        self._vp_pause_btn.configure(state="normal" if allow_pause else "disabled")
         self._vp_recording_label.configure(text="")
 
         # Update device indicators based on current settings
@@ -1311,6 +1309,10 @@ class IrisApp(ctk.CTk):
         self._vp_canvas.configure(text="No video", image=None, font=FONT_BODY)
         self.unbind("<space>")
 
+        # Restore console if it was visible before video
+        if getattr(self, '_console_was_visible_before_video', False) and not self._console_visible:
+            self._toggle_console()
+
         # Restore the correct layout depending on whether experiment is running
         if self._experiment_layout_active:
             self._show_experiment_layout()
@@ -1319,10 +1321,6 @@ class IrisApp(ctk.CTk):
             self._experiment_tab.grid_rowconfigure(1, weight=0)
             self._exp_left.grid(row=0, column=0, padx=(0, 8), pady=8, sticky="nsew")
             self._exp_right.grid(row=0, column=1, padx=(8, 0), pady=8, sticky="nsew")
-
-        # Restore console if it was visible before video
-        if getattr(self, '_console_was_visible_before_video', False) and not self._console_visible:
-            self._toggle_console()
 
     def _show_experiment_layout(self):
         """Switch to running-experiment layout: device status on left, phase display center."""
@@ -1372,46 +1370,42 @@ class IrisApp(ctk.CTk):
         self._exp_left.grid(row=0, column=0, padx=(0, 8), pady=8, sticky="nsew")
         self._exp_right.grid(row=0, column=1, padx=(8, 0), pady=8, sticky="nsew")
 
-    def _vp_play(self):
-        """User clicked Play (or Start in scoring mode)."""
+    def _vp_toggle_playpause(self):
+        """Single button toggles between play and pause."""
         if self._countdown_active:
             return
         if self._video_first_play:
-            # First play: run 3-2-1 countdown before starting
+            # First press: run 3-2-1 countdown before starting
             self._video_first_play = False
             self._countdown_active = True
-            self._vp_play_btn.configure(state="disabled")
-            self._vp_pause_btn.configure(state="disabled")
+            self._vp_playpause_btn.configure(state="disabled")
             self._run_countdown(3)
+        elif self._video_playing:
+            # Pause
+            if self._video_allow_pause:
+                self._user_action_queue.put({"type": "pause"})
+                self._video_playing = False
+                self._vp_playpause_btn.configure(
+                    text="\u25B6  Play",
+                    fg_color=CLR_GREEN, hover_color=CLR_GREEN_H,
+                )
         else:
+            # Resume
             self._user_action_queue.put({"type": "play"})
             self._video_playing = True
-            self._vp_play_btn.configure(state="disabled")
-            self._vp_pause_btn.configure(state="normal")
-
-    def _vp_pause(self):
-        """User clicked Pause."""
-        if self._video_allow_pause and self._video_playing:
-            self._user_action_queue.put({"type": "pause"})
-            self._video_playing = False
-            self._vp_play_btn.configure(state="normal")
-            self._vp_pause_btn.configure(state="disabled")
+            self._vp_playpause_btn.configure(
+                text="\u23F8  Pause",
+                fg_color=CLR_ORANGE, hover_color=CLR_ORANGE_H,
+            )
 
     def _vp_space_handler(self, event=None):
         """Spacebar toggles play/pause when video player is visible."""
         if not self._video_player_visible or self._countdown_active:
             return
-        # Ignore spacebar when focus is in a text entry widget
         focused = self.focus_get()
         if isinstance(focused, (ctk.CTkEntry, ctk.CTkTextbox)):
             return
-        if self._video_first_play:
-            self._vp_play()
-        elif self._video_allow_pause:
-            if self._video_playing:
-                self._vp_pause()
-            else:
-                self._vp_play()
+        self._vp_toggle_playpause()
 
     def _run_countdown(self, count):
         """Show 3-2-1 countdown on the video canvas, then start playback."""
@@ -1427,12 +1421,13 @@ class IrisApp(ctk.CTk):
             self._video_playing = True
             self._user_action_queue.put({"type": "play"})
             if self._video_allow_pause:
-                self._vp_play_btn.configure(state="disabled")
-                self._vp_pause_btn.configure(state="normal")
+                self._vp_playpause_btn.configure(
+                    text="\u23F8  Pause", state="normal",
+                    fg_color=CLR_ORANGE, hover_color=CLR_ORANGE_H,
+                )
             else:
                 # Scoring mode: no controls once started
-                self._vp_play_btn.configure(state="disabled")
-                self._vp_pause_btn.configure(state="disabled")
+                self._vp_playpause_btn.configure(state="disabled")
 
     def _vp_continue(self):
         """User clicked Continue in video player (advance to next phase)."""
@@ -1506,8 +1501,8 @@ class IrisApp(ctk.CTk):
                                    size=(new_w, new_h))
             self._vp_canvas.configure(image=ctk_img, text="")
             self._vp_canvas._ctk_image = ctk_img  # prevent GC
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Video frame render error: {e}")
 
     def _update_video_time(self, position_sec, duration_sec):
         """Update the video time display."""
@@ -1575,6 +1570,7 @@ class IrisApp(ctk.CTk):
                 self.after(0, lambda: self._progress_label.configure(text="Experiment finished."))
                 self.after(0, self._hide_video_player)
                 self.after(0, self._restore_default_layout)
+                self.after(500, self._save_console_log)
 
         self._worker_thread = threading.Thread(target=worker, daemon=True)
         self._worker_thread.start()
@@ -2055,8 +2051,7 @@ class IrisApp(ctk.CTk):
         elif etype == "video_complete":
             self._vp_canvas.configure(text="Video complete", font=FONT_BODY)
             self._video_playing = False
-            self._vp_play_btn.configure(state="disabled")
-            self._vp_pause_btn.configure(state="disabled")
+            self._vp_playpause_btn.configure(state="disabled")
 
         elif etype == "wait_for_continue":
             msg = event.get("message", "Press Continue to proceed.")
