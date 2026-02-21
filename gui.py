@@ -1445,10 +1445,11 @@ class IrisApp(ctk.CTk):
         self._user_action_queue.put({"type": "end_experiment"})
 
     def _on_continue_posthoc(self):
-        """User chose to continue to post-hoc calibration."""
+        """User chose to go to Calibration tab after ending experiment."""
         self._hide_done_choice_buttons()
-        self._phase_display_stop.pack(fill="x", pady=(5, 0))
         self._user_action_queue.put({"type": "continue_posthoc"})
+        # Switch to Calibration tab after experiment ends
+        self.after(1000, lambda: self.tabview.set("Calibration"))
 
     def _show_done_choice_buttons(self):
         """Show the end/posthoc choice buttons on the phase display."""
@@ -2076,13 +2077,6 @@ class IrisApp(ctk.CTk):
         elif etype == "status":
             msg = event.get("message", "")
             self._progress_label.configure(text=msg)
-
-        elif etype == "request_gopro_upload":
-            msg = event.get("message", "Upload GoPro footage.")
-            self._progress_label.configure(text=msg)
-            # Switch to calibration tab to allow file selection
-            self.tabview.set("Calibration")
-            self._show_continue_btn()
 
         elif etype == "experiment_done_choice":
             self._hide_continue_btn()

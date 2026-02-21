@@ -44,10 +44,21 @@ class Camera:
         self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, self.config.resolution[1])
         self._capture.set(cv2.CAP_PROP_FPS, self.config.fps)
 
+        # Widest FOV: disable zoom and autofocus (which can digitally crop)
+        self._capture.set(cv2.CAP_PROP_ZOOM, 0)
+        self._capture.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+
         # Set buffer size to minimize latency
         self._capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-        print(f"Opened camera: {self.config.name}")
+        # Report actual resolution (may differ from requested)
+        actual_w = int(self._capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_h = int(self._capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        actual_fps = self._capture.get(cv2.CAP_PROP_FPS)
+        actual_zoom = self._capture.get(cv2.CAP_PROP_ZOOM)
+        print(f"Opened camera: {self.config.name} "
+              f"(requested {self.config.resolution[0]}x{self.config.resolution[1]}, "
+              f"actual {actual_w}x{actual_h}, fps={actual_fps:.0f}, zoom={actual_zoom})")
         return True
 
     def close(self):
