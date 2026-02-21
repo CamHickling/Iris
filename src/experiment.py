@@ -261,15 +261,60 @@ class Experiment:
         if not self.camera_manager.open_all():
             print("WARNING: Some USB cameras failed to connect")
 
+        # Interactive camera role selection (when exactly 2 cameras are open)
+        open_cameras = [c for c in self.camera_manager.cameras.values() if c.is_open]
+        if len(open_cameras) == 2:
+            print("\n--- Camera Role Selection ---")
+            # Read 5 throwaway frames per camera for auto-exposure warmup
+            for cam in open_cameras:
+                for _ in range(5):
+                    cam.read_frame()
+
+            # Capture one preview frame from each camera
+            preview_frames = {}
+            camera_info = []
+            for cam in open_cameras:
+                frame = cam.read_frame()
+                if frame is not None:
+                    preview_frames[cam.config.id] = frame
+                    camera_info.append({
+                        "id": cam.config.id,
+                        "name": cam.config.name,
+                        "device_index": cam.config.device_index,
+                    })
+
+            if len(preview_frames) == 2:
+                # Send previews to GUI and wait for user selection
+                self._send_gui_event(
+                    "camera_selection",
+                    cameras=camera_info,
+                    frames=preview_frames,
+                )
+                print("Waiting for user to assign camera roles...")
+                action = self._wait_for_user_action("camera_role_selection", timeout=120)
+                self._send_gui_event("hide_camera_selection")
+
+                if action and "role_map" in action:
+                    self.camera_manager.assign_roles(action["role_map"])
+                    print("Camera roles assigned by user.")
+                else:
+                    print("WARNING: No camera role selection received, using defaults.")
+            else:
+                print("WARNING: Could not capture preview frames, using default roles.")
+        else:
+            print(f"Skipping camera selection ({len(open_cameras)} cameras open, need 2).")
+
         # Start overhead camera recording (continuous through performance)
         overhead_cam = self.camera_manager.get_camera_by_role("overhead")
         if overhead_cam is None:
-            print("WARNING: No overhead camera found, using first available")
+            print("WARNING: No overhead camera found by role, using first available")
             if self.camera_manager.cameras:
                 overhead_cam = next(iter(self.camera_manager.cameras.values()))
 
         overhead_path = str(self._session_dir / "performance" / "overhead_camera.mp4")
         if overhead_cam and overhead_cam.is_open:
+            print(f"OVERHEAD CAM selected: '{overhead_cam.config.name}' "
+                  f"(device_index={overhead_cam.config.device_index}, role={overhead_cam.config.role})")
             self._overhead_recorder = VideoRecorder(
                 overhead_cam, overhead_path, fps=overhead_cam.config.fps
             )
@@ -410,6 +455,8 @@ class Experiment:
         face_cam = self.camera_manager.get_camera_by_role("face")
         face_recorder = None
         if face_cam and face_cam.is_open:
+            print(f"REVIEW FACE CAM: '{face_cam.config.name}' "
+                  f"(device_index={face_cam.config.device_index}, role={face_cam.config.role})")
             face_recorder = PausableVideoRecorder(face_cam, face_video_path, fps=face_cam.config.fps)
             face_recorder.start()
 
@@ -425,9 +472,18 @@ class Experiment:
         # Timestamp log for pause/resume events
         timestamps = []
 
-        # Send video frames to GUI via callback
+        # Send video frames to GUI via callback (pre-downscale for performance)
+        import cv2 as _cv2
+
         def on_frame(frame, position_sec):
-            self._send_gui_event("video_frame", frame=frame, position_sec=position_sec,
+            # Downscale to 960px wide before sending to GUI to avoid lag
+            h, w = frame.shape[:2]
+            if w > 960:
+                scale = 960 / w
+                small = _cv2.resize(frame, (960, int(h * scale)), interpolation=_cv2.INTER_AREA)
+            else:
+                small = frame
+            self._send_gui_event("video_frame", frame=small, position_sec=position_sec,
                                  duration_sec=player.duration_sec)
 
         def on_state_change(state):
@@ -526,6 +582,8 @@ class Experiment:
         face_cam = self.camera_manager.get_camera_by_role("face")
         face_recorder = None
         if face_cam and face_cam.is_open:
+            print(f"SCORING FACE CAM: '{face_cam.config.name}' "
+                  f"(device_index={face_cam.config.device_index}, role={face_cam.config.role})")
             face_recorder = VideoRecorder(face_cam, face_video_path, fps=face_cam.config.fps)
             face_recorder.start()
 
@@ -538,8 +596,16 @@ class Experiment:
             else:
                 audio_recorder = None
 
+        import cv2 as _cv2
+
         def on_frame(frame, position_sec):
-            self._send_gui_event("video_frame", frame=frame, position_sec=position_sec,
+            h, w = frame.shape[:2]
+            if w > 960:
+                scale = 960 / w
+                small = _cv2.resize(frame, (960, int(h * scale)), interpolation=_cv2.INTER_AREA)
+            else:
+                small = frame
+            self._send_gui_event("video_frame", frame=small, position_sec=position_sec,
                                  duration_sec=player.duration_sec)
 
         player.on_frame = on_frame

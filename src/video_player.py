@@ -144,8 +144,15 @@ class VideoPlayer:
             self._cap = None
 
     def _playback_loop(self):
-        """Background thread that reads and delivers frames at native FPS."""
+        """Background thread that reads and delivers frames at native FPS.
+
+        Frames are read at the video's native FPS for correct timing,
+        but on_frame callbacks are throttled to ~20fps to avoid overwhelming
+        the GUI while still maintaining smooth playback perception.
+        """
         interval = 1.0 / self.fps if self.fps > 0 else 1.0 / 30.0
+        display_interval = 1.0 / 20.0  # cap display callbacks at 20fps
+        last_display = 0.0
 
         while not self._stop_event.is_set():
             # Wait while paused
@@ -169,8 +176,11 @@ class VideoPlayer:
                 self._current_frame += 1
                 pos = self._current_frame / self.fps if self.fps > 0 else 0.0
 
-            if self.on_frame:
+            # Only send frame to GUI at display rate (skip intermediate frames)
+            now = time.perf_counter()
+            if self.on_frame and (now - last_display) >= display_interval:
                 self.on_frame(frame, pos)
+                last_display = now
 
             elapsed = time.perf_counter() - start
             sleep_time = interval - elapsed

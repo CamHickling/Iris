@@ -556,8 +556,69 @@ class IrisApp(ctk.CTk):
         )
         # Not packed initially
 
+        # Camera selection panel (hidden by default, spans both columns)
+        self._build_camera_selection_panel(parent)
+
         # Video player panel (hidden by default, spans both columns)
         self._build_video_player_panel(parent)
+
+    def _build_camera_selection_panel(self, parent):
+        """Build the camera selection panel (hidden by default)."""
+        self._cs_frame = ctk.CTkFrame(parent)
+        # Not placed in grid initially
+
+        ctk.CTkLabel(
+            self._cs_frame, text="Assign Camera Roles", font=FONT_HEADER,
+        ).pack(pady=(20, 5))
+        ctk.CTkLabel(
+            self._cs_frame,
+            text="Identify which camera is OVERHEAD (pointing down at the mat) "
+                 "and which is FACE (pointing at the participant).",
+            font=FONT_BODY, text_color="gray70", wraplength=900,
+        ).pack(pady=(0, 15))
+
+        # Container for the two side-by-side previews
+        self._cs_previews_frame = ctk.CTkFrame(self._cs_frame, fg_color="transparent")
+        self._cs_previews_frame.pack(fill="both", expand=True, padx=20, pady=(0, 15))
+        self._cs_previews_frame.grid_columnconfigure(0, weight=1)
+        self._cs_previews_frame.grid_columnconfigure(1, weight=1)
+        self._cs_previews_frame.grid_rowconfigure(0, weight=1)
+
+        # Build two camera cards (will be populated when shown)
+        self._cs_cards = []
+        for col in range(2):
+            card = ctk.CTkFrame(self._cs_previews_frame)
+            card.grid(row=0, column=col, padx=10, pady=5, sticky="nsew")
+
+            lbl = ctk.CTkLabel(card, text="", font=FONT_SUB)
+            lbl.pack(pady=(10, 2))
+
+            dev_lbl = ctk.CTkLabel(card, text="", font=FONT_SMALL, text_color="gray60")
+            dev_lbl.pack(pady=(0, 5))
+
+            img_lbl = ctk.CTkLabel(card, text="No preview", fg_color="#1a1a1a")
+            img_lbl.pack(fill="both", expand=True, padx=10, pady=5)
+
+            btn_row = ctk.CTkFrame(card, fg_color="transparent")
+            btn_row.pack(fill="x", padx=10, pady=(5, 10))
+
+            overhead_btn = ctk.CTkButton(
+                btn_row, text="This is OVERHEAD", font=FONT_BTN, height=50,
+                fg_color=CLR_BLUE, hover_color=CLR_BLUE_H,
+            )
+            overhead_btn.pack(side="left", fill="x", expand=True, padx=(0, 5))
+
+            face_btn = ctk.CTkButton(
+                btn_row, text="This is FACE", font=FONT_BTN, height=50,
+                fg_color=CLR_PURPLE, hover_color=CLR_PURPLE_H,
+            )
+            face_btn.pack(side="left", fill="x", expand=True, padx=(5, 0))
+
+            self._cs_cards.append({
+                "card": card, "name_label": lbl, "dev_label": dev_lbl,
+                "img_label": img_lbl, "overhead_btn": overhead_btn,
+                "face_btn": face_btn, "camera_id": None,
+            })
 
     def _build_video_player_panel(self, parent):
         """Build the video player panel (hidden by default)."""
@@ -1322,6 +1383,85 @@ class IrisApp(ctk.CTk):
             self._exp_left.grid(row=0, column=0, padx=(0, 8), pady=8, sticky="nsew")
             self._exp_right.grid(row=0, column=1, padx=(8, 0), pady=8, sticky="nsew")
 
+    def _show_camera_selection(self, cameras, frames):
+        """Show the camera selection panel with preview images."""
+        import cv2
+
+        self.tabview.set("Experiment")
+        self._phase_display.grid_forget()
+        self._exp_left.grid_forget()
+        self._exp_right.grid_forget()
+
+        self._experiment_tab.grid_columnconfigure(0, weight=1)
+        self._experiment_tab.grid_columnconfigure(1, weight=0)
+        self._experiment_tab.grid_rowconfigure(0, weight=1)
+
+        self._cs_frame.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
+
+        for i, cam_info in enumerate(cameras):
+            if i >= 2:
+                break
+            card = self._cs_cards[i]
+            cam_id = cam_info["id"]
+            card["camera_id"] = cam_id
+            card["name_label"].configure(text=cam_info["name"])
+            card["dev_label"].configure(text=f"Device index: {cam_info['device_index']}")
+
+            # Render preview frame
+            frame = frames.get(cam_id)
+            if frame is not None and PILImage is not None:
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = PILImage.fromarray(rgb)
+                # Scale to ~480px wide
+                w, h = img.size
+                scale = 480 / w if w > 0 else 1
+                new_w, new_h = int(w * scale), int(h * scale)
+                img = img.resize((new_w, new_h), PILImage.BILINEAR)
+                ctk_img = ctk.CTkImage(light_image=img, dark_image=img,
+                                       size=(new_w, new_h))
+                card["img_label"].configure(image=ctk_img, text="")
+                card["img_label"]._ctk_image = ctk_img  # prevent GC
+
+            # Wire buttons — single click assigns BOTH roles
+            card["overhead_btn"].configure(
+                command=lambda cid=cam_id: self._on_camera_role_select(cid, "overhead")
+            )
+            card["face_btn"].configure(
+                command=lambda cid=cam_id: self._on_camera_role_select(cid, "face")
+            )
+
+        # Store camera list for role resolution
+        self._cs_camera_ids = [c["id"] for c in cameras[:2]]
+
+    def _hide_camera_selection(self):
+        """Hide the camera selection panel and restore experiment layout."""
+        self._cs_frame.grid_forget()
+        # Clear preview images
+        for card in self._cs_cards:
+            card["img_label"].configure(image=None, text="No preview")
+            card["camera_id"] = None
+
+        if self._experiment_layout_active:
+            self._show_experiment_layout()
+
+    def _on_camera_role_select(self, clicked_cam_id, selected_role):
+        """Handle camera role button click. Assigns both roles from single click."""
+        other_role = "face" if selected_role == "overhead" else "overhead"
+        other_cam_id = None
+        for cid in self._cs_camera_ids:
+            if cid != clicked_cam_id:
+                other_cam_id = cid
+                break
+
+        role_map = {clicked_cam_id: selected_role}
+        if other_cam_id:
+            role_map[other_cam_id] = other_role
+
+        self._user_action_queue.put({
+            "type": "camera_role_selection",
+            "role_map": role_map,
+        })
+
     def _show_experiment_layout(self):
         """Switch to running-experiment layout: device status on left, phase display center."""
         self._experiment_layout_active = True
@@ -1476,7 +1616,11 @@ class IrisApp(ctk.CTk):
         self._phase_display_continue.pack_forget()
 
     def _update_video_frame(self, frame):
-        """Display a video frame in the player canvas, scaled to fit."""
+        """Display a video frame in the player canvas, scaled to fit.
+
+        Frames are pre-downscaled by the experiment thread, so only a
+        lightweight resize to match canvas dimensions is needed here.
+        """
         if PILImage is None:
             return
         try:
@@ -1497,7 +1641,10 @@ class IrisApp(ctk.CTk):
             new_w = max(1, int(src_w * scale))
             new_h = max(1, int(src_h * scale))
 
-            img = img.resize((new_w, new_h), PILImage.LANCZOS)
+            # Only resize if dimensions differ meaningfully (>5px)
+            if abs(new_w - src_w) > 5 or abs(new_h - src_h) > 5:
+                img = img.resize((new_w, new_h), PILImage.BILINEAR)
+
             ctk_img = ctk.CTkImage(light_image=img, dark_image=img,
                                    size=(new_w, new_h))
             self._vp_canvas.configure(image=ctk_img, text="")
@@ -1991,14 +2138,26 @@ class IrisApp(ctk.CTk):
     # ==========================================================================
 
     def _poll_gui_events(self):
-        """Process events from the experiment thread."""
+        """Process events from the experiment thread.
+
+        Video frames are deduplicated: only the latest frame is rendered
+        to prevent queue backup when the GUI can't keep up with FPS.
+        """
+        latest_video_frame = None
         try:
             while True:
                 event = self._gui_event_queue.get_nowait()
-                self._handle_gui_event(event)
+                if event.get("type") == "video_frame":
+                    # Keep only the latest video frame, skip stale ones
+                    latest_video_frame = event
+                else:
+                    self._handle_gui_event(event)
         except queue.Empty:
             pass
-        self.after(50, self._poll_gui_events)
+        # Render only the most recent video frame
+        if latest_video_frame is not None:
+            self._handle_gui_event(latest_video_frame)
+        self.after(33, self._poll_gui_events)
 
     def _handle_gui_event(self, event):
         """Handle a single event from the experiment."""
@@ -2025,6 +2184,15 @@ class IrisApp(ctk.CTk):
                 instructions = phases[idx].get("instructions", "")
             self._phase_display_name.configure(text=name)
             self._phase_display_desc.configure(text=instructions)
+
+        elif etype == "camera_selection":
+            self._show_camera_selection(
+                event.get("cameras", []),
+                event.get("frames", {}),
+            )
+
+        elif etype == "hide_camera_selection":
+            self._hide_camera_selection()
 
         elif etype == "show_video_player":
             self._show_video_player(

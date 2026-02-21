@@ -30,7 +30,9 @@ class VideoRecorder:
             print(f"Cannot record: camera '{self.camera.config.name}' not open")
             return False
 
-        w, h = self.camera.config.resolution
+        # Use actual resolution from camera (not configured), since the camera
+        # may deliver frames at a different size than requested
+        w, h = self.camera.config.actual_resolution or self.camera.config.resolution
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         self._writer = cv2.VideoWriter(self.output_path, fourcc, self.fps, (w, h))
         if not self._writer.isOpened():
@@ -41,16 +43,26 @@ class VideoRecorder:
         self._frame_count = 0
         self._thread = threading.Thread(target=self._record_loop, daemon=True)
         self._thread.start()
-        print(f"Video recording started: {self.output_path}")
+        print(f"Video recording started: {self.output_path} ({w}x{h} @ {self.fps}fps)")
         return True
 
     def _record_loop(self):
         """Main recording loop running on background thread."""
         interval = 1.0 / self.fps
+        expected_size = self.camera.config.actual_resolution or self.camera.config.resolution
+        size_warned = False
         while not self._stop_event.is_set():
             start = time.perf_counter()
             frame = self.camera.read_frame()
             if frame is not None:
+                # Ensure frame matches writer dimensions
+                fh, fw = frame.shape[:2]
+                if (fw, fh) != expected_size:
+                    if not size_warned:
+                        print(f"WARNING: Frame size {fw}x{fh} != writer size "
+                              f"{expected_size[0]}x{expected_size[1]}, resizing")
+                        size_warned = True
+                    frame = cv2.resize(frame, expected_size)
                 with self._lock:
                     self._last_frame = frame.copy()
                 self._writer.write(frame)
@@ -113,6 +125,8 @@ class PausableVideoRecorder(VideoRecorder):
     def _record_loop(self):
         """Recording loop that writes frozen frames when paused."""
         interval = 1.0 / self.fps
+        expected_size = self.camera.config.actual_resolution or self.camera.config.resolution
+        size_warned = False
         while not self._stop_event.is_set():
             start = time.perf_counter()
 
@@ -129,6 +143,13 @@ class PausableVideoRecorder(VideoRecorder):
             else:
                 frame = self.camera.read_frame()
                 if frame is not None:
+                    fh, fw = frame.shape[:2]
+                    if (fw, fh) != expected_size:
+                        if not size_warned:
+                            print(f"WARNING: Frame size {fw}x{fh} != writer size "
+                                  f"{expected_size[0]}x{expected_size[1]}, resizing")
+                            size_warned = True
+                        frame = cv2.resize(frame, expected_size)
                     with self._lock:
                         self._last_frame = frame.copy()
                     self._writer.write(frame)
