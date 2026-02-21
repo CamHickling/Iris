@@ -141,9 +141,7 @@ class IrisApp(ctk.CTk):
 
         # Calibration / GoPro mode state
         self._calibration_done = False
-        self._gopro_mode = "auto"  # "auto" or "manual"
-        self._gopro_dialog_result = None
-        self._gopro_dialog_event = threading.Event()
+        self._gopro_mode = "manual"
 
         self._load_settings()
         self._build_ui()
@@ -495,7 +493,8 @@ class IrisApp(ctk.CTk):
         # Header row with title, message, and device indicators
         hdr = ctk.CTkFrame(self._vp_frame, fg_color="transparent")
         hdr.pack(fill="x", padx=10, pady=(5, 0))
-        ctk.CTkLabel(hdr, text="Video Player", font=FONT_SUB).pack(side="left")
+        self._vp_title_label = ctk.CTkLabel(hdr, text="Video Player", font=FONT_SUB)
+        self._vp_title_label.pack(side="left")
         self._vp_message = ctk.CTkLabel(
             hdr, text="", font=FONT_SMALL, text_color="gray"
         )
@@ -1165,13 +1164,14 @@ class IrisApp(ctk.CTk):
     #  Video Player Controls
     # ==========================================================================
 
-    def _show_video_player(self, allow_pause=True, message=""):
+    def _show_video_player(self, allow_pause=True, message="", title="Video Player"):
         """Show the video player panel in the experiment tab."""
         self._video_player_visible = True
         self._video_allow_pause = allow_pause
         self._video_first_play = True
         self._video_playing = False
         self._countdown_active = False
+        self._vp_phase_title = title
 
         # Switch to Experiment tab and hide settings/actions panels
         self.tabview.set("Experiment")
@@ -1188,8 +1188,21 @@ class IrisApp(ctk.CTk):
             self._console_was_visible_before_video = False
 
         self._vp_frame.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
+        self._vp_title_label.configure(text=title)
         self._vp_message.configure(text=message)
-        self._vp_canvas.configure(text="Press Play to begin", font=FONT_BODY)
+        # Show phase-specific instructional text, or generic prompt
+        if title == "Narrating Review":
+            self._vp_canvas.configure(
+                text="You will now narrate\nyour own performance",
+                font=("Segoe UI", 60, "bold"),
+            )
+        elif title == "Self-Scoring":
+            self._vp_canvas.configure(
+                text="You will now score\nyour own performance",
+                font=("Segoe UI", 60, "bold"),
+            )
+        else:
+            self._vp_canvas.configure(text="Press Play to begin", font=FONT_BODY)
         # Configure buttons for mode
         self._vp_play_btn.configure(
             text="Start" if not allow_pause else "Play",
@@ -1435,57 +1448,14 @@ class IrisApp(ctk.CTk):
                 cal_results = list(tool._results)
                 self.after(0, lambda: self._apply_calibration_results(cal_results))
 
-                if tool.gopro_failed():
-                    self.output_queue.put(("stdout", "\nGoPro connection failed."))
-                    # Ask user: retry or manual mode
-                    self._gopro_dialog_event.clear()
-                    self._gopro_dialog_result = None
-                    self.after(0, self._show_gopro_retry_dialog)
-                    self._gopro_dialog_event.wait()
+                # GoPros always run in manual mode
+                has_gopros = any(g.get("enabled", True)
+                                for g in self.settings.get("gopros", []))
+                if has_gopros:
+                    self.after(0, lambda: self._set_gopro_mode("manual"))
+                    self.after(0, lambda: self._update_gopro_status("manual"))
 
-                    choice = self._gopro_dialog_result
-
-                    if choice == "retry":
-                        self.output_queue.put(("stdout", "\nRetrying GoPro connection..."))
-                        from src.gopro import GoProManager
-                        manager = GoProManager(self.settings.get("gopros", []))
-                        connect_done = threading.Event()
-                        connect_ok = [False]
-
-                        def try_connect():
-                            connect_ok[0] = manager.connect_all()
-                            connect_done.set()
-
-                        t = threading.Thread(target=try_connect, daemon=True)
-                        t.start()
-
-                        if connect_done.wait(timeout=30.0) and connect_ok[0]:
-                            self.output_queue.put(("stdout", "GoPro retry: SUCCESS"))
-                            self.after(0, lambda: self._set_gopro_mode("auto"))
-                            self.after(0, lambda: self._update_gopro_status("pass"))
-                        else:
-                            self.output_queue.put(("stdout",
-                                "GoPro retry failed. Switching to MANUAL mode.\n"
-                                "Please start/stop GoPros manually during the experiment."))
-                            self.after(0, lambda: self._set_gopro_mode("manual"))
-                            self.after(0, lambda: self._update_gopro_status("manual"))
-
-                        try:
-                            manager.disconnect_all()
-                        except Exception:
-                            pass
-                    else:
-                        # Manual mode chosen
-                        self.after(0, lambda: self._set_gopro_mode("manual"))
-                        self.after(0, lambda: self._update_gopro_status("manual"))
-                else:
-                    # GoPros passed (or none configured)
-                    has_gopros = any(g.get("enabled", True)
-                                    for g in self.settings.get("gopros", []))
-                    if has_gopros:
-                        self.after(0, lambda: self._set_gopro_mode("auto"))
-
-                status = "All devices ready!" if passed else "Calibration complete."
+                status = "All devices ready!" if passed else "Calibration complete (some devices failed)."
                 self.output_queue.put(("stdout", f"\nResult: {status}"))
 
                 # Enable Run Experiment
@@ -1503,73 +1473,12 @@ class IrisApp(ctk.CTk):
         self._worker_thread = threading.Thread(target=worker, daemon=True)
         self._worker_thread.start()
 
-    def _show_gopro_retry_dialog(self):
-        """Show a dialog asking the user to retry GoPro connection or switch to manual mode."""
-        dialog = ctk.CTkToplevel(self)
-        dialog.title("GoPro Connection Failed")
-        dialog.geometry("550x280")
-        dialog.transient(self)
-        dialog.grab_set()
-        dialog.resizable(False, False)
-
-        # Center the dialog on screen
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() - 550) // 2
-        y = (dialog.winfo_screenheight() - 280) // 2
-        dialog.geometry(f"550x280+{x}+{y}")
-
-        ctk.CTkLabel(
-            dialog, text="GoPro Connection Failed",
-            font=FONT_SUB,
-        ).pack(pady=(25, 10))
-
-        ctk.CTkLabel(
-            dialog,
-            text="One or more GoPro cameras failed to connect within 30 seconds.\n"
-                 "You can retry the connection, or switch to manual mode\n"
-                 "where you control the GoPros yourself.",
-            font=FONT_BODY, justify="center",
-        ).pack(pady=(0, 20))
-
-        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
-        btn_frame.pack(pady=10)
-
-        def on_retry():
-            self._gopro_dialog_result = "retry"
-            dialog.destroy()
-            self._gopro_dialog_event.set()
-
-        def on_manual():
-            self._gopro_dialog_result = "manual"
-            dialog.destroy()
-            self._gopro_dialog_event.set()
-
-        ctk.CTkButton(
-            btn_frame, text="Retry Connection", width=180, height=45,
-            font=FONT_BODY, fg_color=CLR_BLUE, hover_color=CLR_BLUE_H,
-            command=on_retry,
-        ).pack(side="left", padx=15)
-
-        ctk.CTkButton(
-            btn_frame, text="Manual Mode", width=180, height=45,
-            font=FONT_BODY, fg_color=CLR_ORANGE, hover_color=CLR_ORANGE_H,
-            command=on_manual,
-        ).pack(side="left", padx=15)
-
-        # If user closes the dialog window, default to manual
-        dialog.protocol("WM_DELETE_WINDOW", on_manual)
-
     def _set_gopro_mode(self, mode):
         """Update the GoPro mode and refresh the indicator on the settings bar."""
         self._gopro_mode = mode
-        if mode == "auto":
-            self._mode_indicator.configure(
-                text="  GoPro: AUTO  ", text_color=CLR_GREEN,
-            )
-        else:
-            self._mode_indicator.configure(
-                text="  GoPro: MANUAL  ", text_color=CLR_ORANGE,
-            )
+        self._mode_indicator.configure(
+            text="  GoPro: MANUAL  ", text_color=CLR_ORANGE,
+        )
 
     def _on_calibration_done(self):
         """Enable Run Experiment after calibration has been run."""
@@ -1905,7 +1814,11 @@ class IrisApp(ctk.CTk):
         elif status == "FAIL":
             self._apply_single_status(entry, "fail")
         elif status == "SKIP":
-            self._apply_single_status(entry, "disabled")
+            # GoPros in manual mode get orange "Manual Mode", others get gray "Disabled"
+            if result.get("detail") == "manual mode":
+                self._apply_single_status(entry, "manual")
+            else:
+                self._apply_single_status(entry, "disabled")
 
     def _update_gopro_status(self, gopro_status):
         """Update GoPro rows after a retry attempt.
@@ -1951,6 +1864,7 @@ class IrisApp(ctk.CTk):
             self._show_video_player(
                 allow_pause=event.get("allow_pause", True),
                 message=event.get("message", ""),
+                title=event.get("title", "Video Player"),
             )
 
         elif etype == "hide_video_player":
@@ -2001,6 +1915,7 @@ class IrisApp(ctk.CTk):
             self._progress_label.configure(text="Experiment complete!")
             self._hide_continue_btn()
             self._hide_video_player()
+            self._save_console_log()
 
     # ==========================================================================
     #  Console
@@ -2028,6 +1943,33 @@ class IrisApp(ctk.CTk):
         self._console.configure(state="normal")
         self._console.delete("1.0", "end")
         self._console.configure(state="disabled")
+
+    def _save_console_log(self):
+        """Save the console output to a log file in the session output directory."""
+        text = self._console.get("1.0", "end").strip()
+        if not text:
+            return
+        # Try to find the session directory from settings
+        output_dir = self.settings.get("experiment", {}).get("output_dir", "./output")
+        output_path = Path(output_dir)
+        if not output_path.is_absolute():
+            output_path = Path(os.path.dirname(os.path.abspath(__file__))) / output_path
+        # Find the most recent session directory (most recently modified subfolder)
+        if output_path.exists():
+            subdirs = [d for d in output_path.iterdir() if d.is_dir()]
+            if subdirs:
+                session_dir = max(subdirs, key=lambda d: d.stat().st_mtime)
+            else:
+                session_dir = output_path
+        else:
+            output_path.mkdir(parents=True, exist_ok=True)
+            session_dir = output_path
+        log_path = session_dir / "console_log.txt"
+        try:
+            log_path.write_text(text, encoding="utf-8")
+            self._log(f"Console log saved to: {log_path}")
+        except Exception as e:
+            self._log(f"WARNING: Failed to save console log: {e}")
 
     # ==========================================================================
     #  Helpers

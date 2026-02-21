@@ -421,7 +421,8 @@ class Experiment:
         player.on_complete = on_complete
 
         self._send_gui_event("show_video_player", allow_pause=True,
-                             message="Review overhead video. Use Pause/Play for commentary.")
+                             message="Review overhead video. Use Pause/Play for commentary.",
+                             title="Narrating Review")
 
         # Main review loop
         video_finished = False
@@ -514,7 +515,8 @@ class Experiment:
         player.on_frame = on_frame
 
         self._send_gui_event("show_video_player", allow_pause=False,
-                             message="Scoring: Press Start to begin. Face camera is recording.")
+                             message="Scoring: Press Start to begin. Face camera is recording.",
+                             title="Self-Scoring")
 
         video_finished = False
 

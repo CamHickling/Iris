@@ -6,10 +6,7 @@ import time
 from typing import Optional
 
 from .camera import Camera, CameraConfig
-from .gopro import GoProCam, GoProConfig, GoProManager
 from .heart_rate import PolarH10
-
-GOPRO_CONNECT_TIMEOUT = 30  # seconds
 
 
 class CalibrationTool:
@@ -31,7 +28,7 @@ class CalibrationTool:
         self._check_microphone()
         self._print_summary()
 
-        all_passed = all(r["status"] == "PASS" for r in self._results)
+        all_passed = all(r["status"] in ("PASS", "SKIP") for r in self._results)
         return all_passed
 
     def _check_cameras(self):
@@ -96,78 +93,34 @@ class CalibrationTool:
             })
 
     def _check_gopros(self):
-        """Check each GoPro camera can connect and report battery.
-
-        Uses a 30-second timeout. If connection doesn't complete in time,
-        all GoPros are marked as FAIL with a timeout detail.
-        """
+        """GoPros always run in manual mode - mark them accordingly."""
         gopro_cfgs = self.settings.get("gopros", [])
         if not gopro_cfgs:
-            print("\nNo GoPro cameras configured.")
             return
 
         enabled_cfgs = [c for c in gopro_cfgs if c.get("enabled", True)]
-        print(f"\n--- GoPro Cameras ({len(enabled_cfgs)}) ---")
-
-        manager = GoProManager(gopro_cfgs)
-
-        if not manager.cameras:
-            print("  No enabled GoPro cameras.")
+        if not enabled_cfgs:
             return
 
-        # Run connection with a timeout
-        connect_done = threading.Event()
+        print(f"\n--- GoPro Cameras ({len(enabled_cfgs)}) - Manual Mode ---")
 
-        def do_connect():
-            manager.connect_all()
-            connect_done.set()
-
-        t = threading.Thread(target=do_connect, daemon=True)
-        t.start()
-
-        if not connect_done.wait(timeout=GOPRO_CONNECT_TIMEOUT):
-            # Timed out
-            print(f"  GoPro connection timed out after {GOPRO_CONNECT_TIMEOUT}s")
-            for cam_id, cam in manager.cameras.items():
+        for cfg in gopro_cfgs:
+            if not cfg.get("enabled", True):
                 self._results.append({
-                    "device": cam.config.name,
+                    "device": cfg["name"],
                     "type": "GoPro",
-                    "status": "FAIL",
-                    "detail": f"connection timed out ({GOPRO_CONNECT_TIMEOUT}s)",
+                    "status": "SKIP",
+                    "detail": "Disabled in config",
                 })
-            try:
-                manager.disconnect_all()
-            except Exception:
-                pass
-            return
+                continue
 
-        # Connection finished in time — check results
-        for cam_id, cam in manager.cameras.items():
-            connected = cam.is_connected
-            battery = cam.get_battery() if connected else None
-
-            detail = []
-            if connected:
-                detail.append("connected")
-                detail.append(f"model={cam.config.model}")
-                if battery is not None:
-                    detail.append(f"battery={battery}%")
-                else:
-                    detail.append("battery=unknown")
-            else:
-                detail.append("connection failed")
-
-            status = "PASS" if connected else "FAIL"
-            print(f"  {cam.config.name}: {status} - {', '.join(detail)}")
-
+            print(f"  {cfg['name']}: Manual mode - start/stop GoPros yourself")
             self._results.append({
-                "device": cam.config.name,
+                "device": cfg["name"],
                 "type": "GoPro",
-                "status": status,
-                "detail": ", ".join(detail),
+                "status": "SKIP",
+                "detail": "manual mode",
             })
-
-        manager.disconnect_all()
 
     def _check_heart_rate(self):
         """Check Polar H10 connectivity and signal."""
@@ -302,11 +255,6 @@ class CalibrationTool:
                 "status": "FAIL",
                 "detail": str(e),
             })
-
-    def gopro_failed(self) -> bool:
-        """Return True if any GoPro device failed calibration."""
-        return any(r["type"] == "GoPro" and r["status"] == "FAIL"
-                   for r in self._results)
 
     def _print_summary(self):
         """Print a formatted summary table."""
