@@ -118,6 +118,7 @@ class IrisApp(ctk.CTk):
         self._mic_w = {}
         self._phase_cards = []
         self._cal_w = {}
+        self._device_status_rows = []  # device status panel entries
 
         # Scrollable frame references (for rebuilding)
         self._cam_scroll = None
@@ -340,6 +341,12 @@ class IrisApp(ctk.CTk):
         )
         self._console_toggle_btn.pack(side="left", padx=8, pady=8)
 
+        ctk.CTkButton(
+            bar, text="Exit", width=100, height=38,
+            font=FONT_BODY, fg_color=CLR_RED, hover_color=CLR_RED_H,
+            command=self._on_close,
+        ).pack(side="right", padx=8, pady=8)
+
         self._status_label = ctk.CTkLabel(bar, text="Ready", font=FONT_BODY)
         self._status_label.pack(side="right", padx=20)
 
@@ -363,7 +370,8 @@ class IrisApp(ctk.CTk):
         parent.grid_rowconfigure(1, weight=0)
 
         # Left: settings
-        left = ctk.CTkFrame(parent)
+        self._exp_left = ctk.CTkFrame(parent)
+        left = self._exp_left
         left.grid(row=0, column=0, padx=(0, 8), pady=8, sticky="nsew")
 
         ctk.CTkLabel(left, text="Experiment Settings", font=FONT_HEADER).pack(
@@ -383,8 +391,21 @@ class IrisApp(ctk.CTk):
                           font=FONT_BODY, height=36).pack(side="left")
         self._exp_w["recording_format"] = fmt
 
+        # --- Device Status Section ---
+        ctk.CTkFrame(left, fg_color="gray30", height=2).pack(
+            fill="x", padx=25, pady=(20, 0)
+        )
+
+        ctk.CTkLabel(left, text="Device Status", font=FONT_HEADER).pack(
+            anchor="w", padx=25, pady=(14, 10)
+        )
+
+        self._device_status_frame = ctk.CTkFrame(left, fg_color="transparent")
+        self._device_status_frame.pack(fill="both", expand=True, padx=25, pady=(0, 15))
+
         # Right: actions
-        right = ctk.CTkFrame(parent)
+        self._exp_right = ctk.CTkFrame(parent)
+        right = self._exp_right
         right.grid(row=0, column=1, padx=(8, 0), pady=8, sticky="nsew")
 
         ctk.CTkLabel(right, text="Actions", font=FONT_HEADER).pack(
@@ -471,7 +492,7 @@ class IrisApp(ctk.CTk):
         self._vp_frame = ctk.CTkFrame(parent)
         # Not placed in grid initially - will be shown/hidden dynamically
 
-        # Header row with title and message side by side
+        # Header row with title, message, and device indicators
         hdr = ctk.CTkFrame(self._vp_frame, fg_color="transparent")
         hdr.pack(fill="x", padx=10, pady=(5, 0))
         ctk.CTkLabel(hdr, text="Video Player", font=FONT_SUB).pack(side="left")
@@ -479,6 +500,14 @@ class IrisApp(ctk.CTk):
             hdr, text="", font=FONT_SMALL, text_color="gray"
         )
         self._vp_message.pack(side="left", padx=15)
+
+        # Device indicators (right side of header)
+        ind_frame = ctk.CTkFrame(hdr, fg_color="transparent")
+        ind_frame.pack(side="right")
+
+        self._vp_ind_face = self._build_vp_indicator(ind_frame, "Face Cam")
+        self._vp_ind_hr = self._build_vp_indicator(ind_frame, "Heart Rate")
+        self._vp_ind_mic = self._build_vp_indicator(ind_frame, "Microphone")
 
         # Video display area - expands to fill available space
         self._vp_canvas = ctk.CTkLabel(
@@ -518,6 +547,24 @@ class IrisApp(ctk.CTk):
             command=self._vp_continue,
         )
         self._vp_continue_btn.pack(side="right", padx=(0, 5))
+
+    def _build_vp_indicator(self, parent, label):
+        """Build a single device indicator (dot + label) for the video player."""
+        frame = ctk.CTkFrame(parent, fg_color="transparent")
+        frame.pack(side="left", padx=(12, 0))
+        dot = ctk.CTkLabel(frame, text="\u25cf", font=("Segoe UI", 16),
+                           text_color="gray50", width=18)
+        dot.pack(side="left")
+        lbl = ctk.CTkLabel(frame, text=label, font=("Segoe UI", 13, "bold"),
+                           text_color="gray50")
+        lbl.pack(side="left", padx=(3, 0))
+        return {"dot": dot, "label": lbl}
+
+    def _set_vp_indicator(self, indicator, active):
+        """Set a video player device indicator to active (green) or inactive (gray)."""
+        color = CLR_GREEN if active else "gray50"
+        indicator["dot"].configure(text_color=color)
+        indicator["label"].configure(text_color=color)
 
     # --- Devices Tab ---
 
@@ -813,6 +860,7 @@ class IrisApp(ctk.CTk):
         self._rebuild_gopros()
         self._rebuild_phases()
         self._update_summary()
+        self._rebuild_device_status()
 
     def _update_summary(self):
         s = self.settings
@@ -1125,9 +1173,12 @@ class IrisApp(ctk.CTk):
         self._video_playing = False
         self._countdown_active = False
 
-        # Reconfigure experiment tab: shrink settings, expand video player
-        self._experiment_tab.grid_rowconfigure(0, weight=0)
-        self._experiment_tab.grid_rowconfigure(1, weight=1)
+        # Switch to Experiment tab and hide settings/actions panels
+        self.tabview.set("Experiment")
+        self._exp_left.grid_forget()
+        self._exp_right.grid_forget()
+        self._experiment_tab.grid_rowconfigure(0, weight=1)
+        self._experiment_tab.grid_rowconfigure(1, weight=0)
 
         # Auto-hide console to maximize video space
         if self._console_visible:
@@ -1136,7 +1187,7 @@ class IrisApp(ctk.CTk):
         else:
             self._console_was_visible_before_video = False
 
-        self._vp_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
+        self._vp_frame.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
         self._vp_message.configure(text=message)
         self._vp_canvas.configure(text="Press Play to begin", font=FONT_BODY)
         # Configure buttons for mode
@@ -1146,11 +1197,24 @@ class IrisApp(ctk.CTk):
         )
         self._vp_pause_btn.configure(state="normal" if allow_pause else "disabled")
         self._vp_recording_label.configure(text="")
+
+        # Update device indicators based on current settings
+        s = self.settings
+        face_active = any(
+            c.get("enabled", True) and c.get("role") == "face"
+            for c in s.get("cameras", [])
+        )
+        hr_active = s.get("heart_rate", {}).get("enabled", False)
+        mic_active = s.get("microphone", {}).get("enabled", False)
+        self._set_vp_indicator(self._vp_ind_face, face_active)
+        self._set_vp_indicator(self._vp_ind_hr, hr_active)
+        self._set_vp_indicator(self._vp_ind_mic, mic_active)
+
         # Bind spacebar for play/pause toggle
         self.bind("<space>", self._vp_space_handler)
 
     def _hide_video_player(self):
-        """Hide the video player panel."""
+        """Hide the video player panel and restore settings/actions panels."""
         self._video_player_visible = False
         self._video_first_play = True
         self._video_playing = False
@@ -1159,9 +1223,11 @@ class IrisApp(ctk.CTk):
         self._vp_canvas.configure(text="No video", image=None, font=FONT_BODY)
         self.unbind("<space>")
 
-        # Restore experiment tab row weights
+        # Restore settings and actions panels
         self._experiment_tab.grid_rowconfigure(0, weight=1)
         self._experiment_tab.grid_rowconfigure(1, weight=0)
+        self._exp_left.grid(row=0, column=0, padx=(0, 8), pady=8, sticky="nsew")
+        self._exp_right.grid(row=0, column=1, padx=(8, 0), pady=8, sticky="nsew")
 
         # Restore console if it was visible before video
         if getattr(self, '_console_was_visible_before_video', False) and not self._console_visible:
@@ -1351,6 +1417,10 @@ class IrisApp(ctk.CTk):
         self._set_running(True)
         self._progress_label.configure(text="Running device calibration...")
 
+        # Refresh device list and set all to "checking"
+        self._rebuild_device_status()
+        self._set_all_devices_checking()
+
         def worker():
             old_stdout, old_stderr = sys.stdout, sys.stderr
             sys.stdout = OutputRedirector(self.output_queue, "stdout")
@@ -1360,6 +1430,10 @@ class IrisApp(ctk.CTk):
 
                 tool = CalibrationTool(self.settings)
                 passed = tool.run()
+
+                # Push calibration results to the device status panel
+                cal_results = list(tool._results)
+                self.after(0, lambda: self._apply_calibration_results(cal_results))
 
                 if tool.gopro_failed():
                     self.output_queue.put(("stdout", "\nGoPro connection failed."))
@@ -1388,11 +1462,13 @@ class IrisApp(ctk.CTk):
                         if connect_done.wait(timeout=30.0) and connect_ok[0]:
                             self.output_queue.put(("stdout", "GoPro retry: SUCCESS"))
                             self.after(0, lambda: self._set_gopro_mode("auto"))
+                            self.after(0, lambda: self._update_gopro_status("pass"))
                         else:
                             self.output_queue.put(("stdout",
                                 "GoPro retry failed. Switching to MANUAL mode.\n"
                                 "Please start/stop GoPros manually during the experiment."))
                             self.after(0, lambda: self._set_gopro_mode("manual"))
+                            self.after(0, lambda: self._update_gopro_status("manual"))
 
                         try:
                             manager.disconnect_all()
@@ -1401,6 +1477,7 @@ class IrisApp(ctk.CTk):
                     else:
                         # Manual mode chosen
                         self.after(0, lambda: self._set_gopro_mode("manual"))
+                        self.after(0, lambda: self._update_gopro_status("manual"))
                 else:
                     # GoPros passed (or none configured)
                     has_gopros = any(g.get("enabled", True)
@@ -1681,6 +1758,166 @@ class IrisApp(ctk.CTk):
             self._stop_btn.configure(state=state_off)
             self._status_label.configure(text="Ready", text_color="white")
             self._hide_continue_btn()
+
+    # ==========================================================================
+    #  Device Status
+    # ==========================================================================
+
+    def _rebuild_device_status(self):
+        """Rebuild the device status rows from current settings."""
+        for w in self._device_status_frame.winfo_children():
+            w.destroy()
+        self._device_status_rows = []
+
+        s = self.settings
+
+        for cam in s.get("cameras", []):
+            enabled = cam.get("enabled", True)
+            self._add_device_row(
+                cam.get("name", "Camera"), "camera", cam,
+                "disabled" if not enabled else "unknown",
+            )
+
+        for gp in s.get("gopros", []):
+            enabled = gp.get("enabled", True)
+            self._add_device_row(
+                gp.get("name", "GoPro"), "gopro", gp,
+                "disabled" if not enabled else "unknown",
+            )
+
+        hr = s.get("heart_rate", {})
+        self._add_device_row(
+            "Polar H10", "heart_rate", hr,
+            "disabled" if not hr.get("enabled") else "unknown",
+        )
+
+        mic = s.get("microphone", {})
+        self._add_device_row(
+            mic.get("device_name", "Microphone"), "microphone", mic,
+            "disabled" if not mic.get("enabled") else "unknown",
+        )
+
+    def _add_device_row(self, name, dev_type, config, initial_status):
+        """Add a single device status row to the panel."""
+        row = ctk.CTkFrame(self._device_status_frame, fg_color="gray20", corner_radius=8)
+        row.pack(fill="x", pady=4, ipady=6)
+
+        dot = ctk.CTkLabel(row, text="\u25cf", font=("Segoe UI", 22), width=30)
+        dot.pack(side="left", padx=(12, 0))
+
+        # Device type tag
+        type_labels = {
+            "camera": "CAM",
+            "gopro": "GP",
+            "heart_rate": "HR",
+            "microphone": "MIC",
+        }
+        tag = type_labels.get(dev_type, "")
+        tag_lbl = ctk.CTkLabel(
+            row, text=tag, font=("Segoe UI", 13, "bold"), width=42,
+            text_color="gray55", anchor="w",
+        )
+        tag_lbl.pack(side="left", padx=(6, 4))
+
+        name_lbl = ctk.CTkLabel(row, text=name, font=FONT_BODY, anchor="w")
+        name_lbl.pack(side="left", fill="x", expand=True)
+
+        status_lbl = ctk.CTkLabel(row, text="", font=("Segoe UI", 16, "bold"), anchor="e")
+        status_lbl.pack(side="right", padx=(0, 14))
+
+        entry = {
+            "dot": dot,
+            "status_label": status_lbl,
+            "type": dev_type,
+            "config": config,
+        }
+        self._device_status_rows.append(entry)
+        self._apply_single_status(entry, initial_status)
+
+    def _apply_single_status(self, entry, status):
+        """Set the visual status of a single device row."""
+        status_map = {
+            "pass": (CLR_GREEN, "Connected"),
+            "fail": (CLR_RED, "Connection Failed"),
+            "manual": (CLR_ORANGE, "Manual Mode"),
+            "disabled": ("gray50", "Disabled"),
+            "unknown": ("gray60", "\u2014"),
+            "checking": (CLR_ORANGE, "Checking\u2026"),
+        }
+        color, text = status_map.get(status, ("gray60", status))
+        entry["dot"].configure(text_color=color)
+        entry["status_label"].configure(text=text, text_color=color)
+
+    def _set_all_devices_checking(self):
+        """Set all enabled device rows to 'checking' state."""
+        for entry in self._device_status_rows:
+            cfg = entry["config"]
+            if entry["type"] == "heart_rate":
+                if cfg.get("enabled"):
+                    self._apply_single_status(entry, "checking")
+            elif cfg.get("enabled", True):
+                self._apply_single_status(entry, "checking")
+
+    def _apply_calibration_results(self, cal_results):
+        """Update device status panel from CalibrationTool._results.
+
+        Each result dict has: device, type, status (PASS/FAIL/SKIP), detail.
+        """
+        # Map calibration type names to our internal types
+        type_map = {
+            "USB Camera": "camera",
+            "GoPro": "gopro",
+            "Heart Rate": "heart_rate",
+            "Audio": "microphone",
+        }
+
+        # Track which rows we've matched so unmatched ones stay as-is
+        matched = set()
+
+        for r in cal_results:
+            dev_type = type_map.get(r["type"])
+            if dev_type is None:
+                continue
+
+            # Find the matching row by type and device name
+            for i, entry in enumerate(self._device_status_rows):
+                if i in matched:
+                    continue
+                if entry["type"] != dev_type:
+                    continue
+                # Match by name: the calibration result "device" should
+                # be contained in or match the config name
+                cfg_name = entry["config"].get("name",
+                           entry["config"].get("device_name", ""))
+                if (cfg_name and cfg_name in r["device"]) or \
+                   r["device"] in cfg_name or \
+                   entry["type"] == "heart_rate" or \
+                   entry["type"] == "microphone":
+                    matched.add(i)
+                    self._apply_cal_result_to_row(entry, r)
+                    break
+
+    def _apply_cal_result_to_row(self, entry, result):
+        """Apply a single calibration result to a device row."""
+        status = result["status"]
+        if status == "PASS":
+            self._apply_single_status(entry, "pass")
+        elif status == "FAIL":
+            self._apply_single_status(entry, "fail")
+        elif status == "SKIP":
+            self._apply_single_status(entry, "disabled")
+
+    def _update_gopro_status(self, gopro_status):
+        """Update GoPro rows after a retry attempt.
+
+        Args:
+            gopro_status: "pass" or "manual"
+        """
+        for entry in self._device_status_rows:
+            if entry["type"] == "gopro":
+                cfg = entry["config"]
+                if cfg.get("enabled", True):
+                    self._apply_single_status(entry, gopro_status)
 
     # ==========================================================================
     #  GUI Event Polling (experiment -> GUI)
