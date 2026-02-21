@@ -143,6 +143,10 @@ class IrisApp(ctk.CTk):
         self._calibration_done = False
         self._gopro_mode = "manual"
 
+        # Phase tracking
+        self._current_phase_index = 0
+        self._experiment_layout_active = False
+
         self._load_settings()
         self._build_ui()
         self._populate_ui()
@@ -367,21 +371,25 @@ class IrisApp(ctk.CTk):
         parent.grid_rowconfigure(0, weight=1)
         parent.grid_rowconfigure(1, weight=0)
 
-        # Left: settings
+        # Left: settings + device status
         self._exp_left = ctk.CTkFrame(parent)
         left = self._exp_left
         left.grid(row=0, column=0, padx=(0, 8), pady=8, sticky="nsew")
 
-        ctk.CTkLabel(left, text="Experiment Settings", font=FONT_HEADER).pack(
+        # -- Experiment Settings (hidden once experiment starts) --
+        self._exp_settings_frame = ctk.CTkFrame(left, fg_color="transparent")
+        self._exp_settings_frame.pack(fill="x")
+
+        ctk.CTkLabel(self._exp_settings_frame, text="Experiment Settings", font=FONT_HEADER).pack(
             anchor="w", padx=25, pady=(25, 20)
         )
 
-        self._exp_w["name"] = self._labeled_entry(left, "Name:", "Taekwondo Experiment")
+        self._exp_w["name"] = self._labeled_entry(self._exp_settings_frame, "Name:", "Taekwondo Experiment")
         self._exp_w["output_dir"] = self._labeled_entry(
-            left, "Output Dir:", "./output", browse="dir"
+            self._exp_settings_frame, "Output Dir:", "./output", browse="dir"
         )
 
-        row = ctk.CTkFrame(left, fg_color="transparent")
+        row = ctk.CTkFrame(self._exp_settings_frame, fg_color="transparent")
         row.pack(fill="x", padx=25, pady=8)
         ctk.CTkLabel(row, text="Rec. Format:", width=140, anchor="w", font=FONT_BODY).pack(side="left")
         fmt = ctk.StringVar(value="mp4")
@@ -390,13 +398,11 @@ class IrisApp(ctk.CTk):
         self._exp_w["recording_format"] = fmt
 
         # --- Device Status Section ---
-        ctk.CTkFrame(left, fg_color="gray30", height=2).pack(
-            fill="x", padx=25, pady=(20, 0)
-        )
+        self._device_status_separator = ctk.CTkFrame(left, fg_color="gray30", height=2)
+        self._device_status_separator.pack(fill="x", padx=25, pady=(20, 0))
 
-        ctk.CTkLabel(left, text="Device Status", font=FONT_HEADER).pack(
-            anchor="w", padx=25, pady=(14, 10)
-        )
+        self._device_status_header = ctk.CTkLabel(left, text="Device Status", font=FONT_HEADER)
+        self._device_status_header.pack(anchor="w", padx=25, pady=(14, 10))
 
         self._device_status_frame = ctk.CTkFrame(left, fg_color="transparent")
         self._device_status_frame.pack(fill="both", expand=True, padx=25, pady=(0, 15))
@@ -474,13 +480,81 @@ class IrisApp(ctk.CTk):
         self._continue_btn = ctk.CTkButton(
             prog_f,
             text="Continue",
-            font=FONT_BODY,
+            font=FONT_BTN,
             fg_color=CLR_BLUE,
             hover_color=CLR_BLUE_H,
             height=55,
             command=self._on_continue,
         )
         # Not packed initially — shown/hidden dynamically
+
+        # ---- Center Phase Display (hidden by default, shown during experiment) ----
+        self._phase_display = ctk.CTkFrame(parent, fg_color="transparent")
+        # Not placed in grid initially
+
+        self._phase_display_name = ctk.CTkLabel(
+            self._phase_display, text="", font=("Segoe UI", 72, "bold"),
+            anchor="center", justify="center",
+        )
+        self._phase_display_name.pack(expand=True, fill="both", pady=(40, 5))
+
+        self._phase_display_desc = ctk.CTkLabel(
+            self._phase_display, text="", font=("Segoe UI", 28),
+            anchor="center", justify="center", text_color="gray70",
+            wraplength=800,
+        )
+        self._phase_display_desc.pack(fill="x", pady=(0, 10))
+
+        self._phase_display_progress = ctk.CTkProgressBar(self._phase_display, height=14)
+        self._phase_display_progress.pack(fill="x", padx=60, pady=(0, 8))
+        self._phase_display_progress.set(0)
+
+        # Bottom button area — continue (dynamic) then stop (always visible)
+        pd_btn_frame = ctk.CTkFrame(self._phase_display, fg_color="transparent")
+        pd_btn_frame.pack(fill="x", padx=60, pady=(5, 20))
+
+        self._phase_display_continue = ctk.CTkButton(
+            pd_btn_frame,
+            text="Continue",
+            font=FONT_BTN,
+            fg_color=CLR_GREEN,
+            hover_color=CLR_GREEN_H,
+            height=65,
+            command=self._on_continue,
+        )
+        # Not packed initially — shown/hidden dynamically
+
+        self._phase_display_stop = ctk.CTkButton(
+            pd_btn_frame,
+            text="Stop Experiment",
+            font=FONT_BODY,
+            fg_color=CLR_RED,
+            hover_color=CLR_RED_H,
+            height=45,
+            command=self._stop_experiment,
+        )
+        self._phase_display_stop.pack(fill="x", pady=(5, 0))
+
+        # Done-choice buttons (shown after finish phase)
+        self._done_end_btn = ctk.CTkButton(
+            pd_btn_frame,
+            text="End Experiment",
+            font=FONT_BTN,
+            fg_color=CLR_GREEN,
+            hover_color=CLR_GREEN_H,
+            height=65,
+            command=self._on_end_experiment,
+        )
+        self._done_posthoc_btn = ctk.CTkButton(
+            pd_btn_frame,
+            text="Post-hoc Calibration",
+            font=FONT_BTN,
+            fg_color=CLR_BLUE,
+            hover_color=CLR_BLUE_H,
+            height=65,
+            command=self._on_continue_posthoc,
+        )
+        # Not packed initially
 
         # Video player panel (hidden by default, spans both columns)
         self._build_video_player_panel(parent)
@@ -1173,10 +1247,11 @@ class IrisApp(ctk.CTk):
         self._countdown_active = False
         self._vp_phase_title = title
 
-        # Switch to Experiment tab and hide settings/actions panels
+        # Switch to Experiment tab and hide all other panels
         self.tabview.set("Experiment")
         self._exp_left.grid_forget()
         self._exp_right.grid_forget()
+        self._phase_display.grid_forget()
         self._experiment_tab.grid_rowconfigure(0, weight=1)
         self._experiment_tab.grid_rowconfigure(1, weight=0)
 
@@ -1227,7 +1302,7 @@ class IrisApp(ctk.CTk):
         self.bind("<space>", self._vp_space_handler)
 
     def _hide_video_player(self):
-        """Hide the video player panel and restore settings/actions panels."""
+        """Hide the video player panel and restore the appropriate layout."""
         self._video_player_visible = False
         self._video_first_play = True
         self._video_playing = False
@@ -1236,15 +1311,66 @@ class IrisApp(ctk.CTk):
         self._vp_canvas.configure(text="No video", image=None, font=FONT_BODY)
         self.unbind("<space>")
 
-        # Restore settings and actions panels
-        self._experiment_tab.grid_rowconfigure(0, weight=1)
-        self._experiment_tab.grid_rowconfigure(1, weight=0)
-        self._exp_left.grid(row=0, column=0, padx=(0, 8), pady=8, sticky="nsew")
-        self._exp_right.grid(row=0, column=1, padx=(8, 0), pady=8, sticky="nsew")
+        # Restore the correct layout depending on whether experiment is running
+        if self._experiment_layout_active:
+            self._show_experiment_layout()
+        else:
+            self._experiment_tab.grid_rowconfigure(0, weight=1)
+            self._experiment_tab.grid_rowconfigure(1, weight=0)
+            self._exp_left.grid(row=0, column=0, padx=(0, 8), pady=8, sticky="nsew")
+            self._exp_right.grid(row=0, column=1, padx=(8, 0), pady=8, sticky="nsew")
 
         # Restore console if it was visible before video
         if getattr(self, '_console_was_visible_before_video', False) and not self._console_visible:
             self._toggle_console()
+
+    def _show_experiment_layout(self):
+        """Switch to running-experiment layout: device status on left, phase display center."""
+        self._experiment_layout_active = True
+
+        # Hide settings fields and separator, show only device status
+        self._exp_settings_frame.pack_forget()
+        self._device_status_separator.pack_forget()
+
+        # Reconfigure grid: narrow left column for devices, wide center for phase
+        self._experiment_tab.grid_columnconfigure(0, weight=0, minsize=350)
+        self._experiment_tab.grid_columnconfigure(1, weight=1)
+
+        # Hide the actions panel
+        self._exp_right.grid_forget()
+
+        # Show left panel (device status only) and center phase display
+        self._exp_left.grid(row=0, column=0, padx=(0, 8), pady=8, sticky="nsew")
+        self._phase_display.grid(row=0, column=1, padx=(8, 0), pady=8, sticky="nsew")
+
+    def _restore_default_layout(self):
+        """Restore the default pre-experiment layout with settings and actions."""
+        self._experiment_layout_active = False
+
+        # Clean up any choice buttons that may still be visible
+        self._hide_done_choice_buttons()
+        self._phase_display_stop.pack_forget()
+        self._phase_display_stop.pack(fill="x", pady=(5, 0))
+
+        # Rebuild left panel pack order exactly as built
+        self._exp_settings_frame.pack_forget()
+        self._device_status_separator.pack_forget()
+        self._device_status_header.pack_forget()
+        self._device_status_frame.pack_forget()
+
+        self._exp_settings_frame.pack(fill="x")
+        self._device_status_separator.pack(fill="x", padx=25, pady=(20, 0))
+        self._device_status_header.pack(anchor="w", padx=25, pady=(14, 10))
+        self._device_status_frame.pack(fill="both", expand=True, padx=25, pady=(0, 15))
+
+        # Restore grid weights
+        self._experiment_tab.grid_columnconfigure(0, weight=1, minsize=0)
+        self._experiment_tab.grid_columnconfigure(1, weight=1)
+
+        # Hide phase display, show both panels
+        self._phase_display.grid_forget()
+        self._exp_left.grid(row=0, column=0, padx=(0, 8), pady=8, sticky="nsew")
+        self._exp_right.grid(row=0, column=1, padx=(8, 0), pady=8, sticky="nsew")
 
     def _vp_play(self):
         """User clicked Play (or Start in scoring mode)."""
@@ -1318,13 +1444,40 @@ class IrisApp(ctk.CTk):
         self._user_action_queue.put({"type": "continue"})
         self._hide_continue_btn()
 
-    def _show_continue_btn(self):
-        """Show the main Continue button in the progress section."""
+    def _on_end_experiment(self):
+        """User chose to end the experiment (skip post-hoc calibration)."""
+        self._hide_done_choice_buttons()
+        self._user_action_queue.put({"type": "end_experiment"})
+
+    def _on_continue_posthoc(self):
+        """User chose to continue to post-hoc calibration."""
+        self._hide_done_choice_buttons()
+        self._phase_display_stop.pack(fill="x", pady=(5, 0))
+        self._user_action_queue.put({"type": "continue_posthoc"})
+
+    def _show_done_choice_buttons(self):
+        """Show the end/posthoc choice buttons on the phase display."""
+        self._done_end_btn.pack(fill="x", pady=(5, 5))
+        self._done_posthoc_btn.pack(fill="x", pady=(5, 0))
+
+    def _hide_done_choice_buttons(self):
+        """Hide the end/posthoc choice buttons."""
+        self._done_end_btn.pack_forget()
+        self._done_posthoc_btn.pack_forget()
+
+    def _show_continue_btn(self, label=None):
+        """Show Continue buttons with optional label (both phase display and actions panel)."""
+        if label:
+            self._continue_btn.configure(text=label)
+            self._phase_display_continue.configure(text=label)
         self._continue_btn.pack(fill="x", pady=(10, 0))
+        # Pack continue above stop in the phase display button frame
+        self._phase_display_continue.pack(fill="x", pady=(0, 5), before=self._phase_display_stop)
 
     def _hide_continue_btn(self):
-        """Hide the main Continue button."""
+        """Hide Continue buttons."""
         self._continue_btn.pack_forget()
+        self._phase_display_continue.pack_forget()
 
     def _update_video_frame(self, frame):
         """Display a video frame in the player canvas, scaled to fit."""
@@ -1379,6 +1532,9 @@ class IrisApp(ctk.CTk):
         self._progress_label.configure(text="Starting experiment...")
         self._progress_bar.set(0)
 
+        # Switch to running layout: device status left, phase display center
+        self._show_experiment_layout()
+
         # Clear event queues
         while not self._gui_event_queue.empty():
             try:
@@ -1418,6 +1574,7 @@ class IrisApp(ctk.CTk):
                 self.after(0, lambda: self._set_running(False))
                 self.after(0, lambda: self._progress_label.configure(text="Experiment finished."))
                 self.after(0, self._hide_video_player)
+                self.after(0, self._restore_default_layout)
 
         self._worker_thread = threading.Thread(target=worker, daemon=True)
         self._worker_thread.start()
@@ -1854,11 +2011,23 @@ class IrisApp(ctk.CTk):
             idx = event.get("phase_index", 0)
             total = event.get("total_phases", 1)
             name = event.get("phase_name", "")
+            phase_id = event.get("phase_id", "")
+            self._current_phase_index = idx
             self._phase_indicator.configure(
                 text=f"Phase {idx + 1}/{total}: {name}"
             )
-            self._progress_bar.set((idx + 1) / total if total > 0 else 0)
+            progress = (idx + 1) / total if total > 0 else 0
+            self._progress_bar.set(progress)
+            self._phase_display_progress.set(progress)
             self._hide_continue_btn()
+
+            # Update center phase display
+            phases = self.settings.get("phases", [])
+            instructions = ""
+            if idx < len(phases):
+                instructions = phases[idx].get("instructions", "")
+            self._phase_display_name.configure(text=name)
+            self._phase_display_desc.configure(text=instructions)
 
         elif etype == "show_video_player":
             self._show_video_player(
@@ -1892,7 +2061,16 @@ class IrisApp(ctk.CTk):
         elif etype == "wait_for_continue":
             msg = event.get("message", "Press Continue to proceed.")
             self._progress_label.configure(text=msg)
-            self._show_continue_btn()
+            # Build "Continue to <next phase>" label
+            phases = self.settings.get("phases", [])
+            idx = getattr(self, "_current_phase_index", 0)
+            next_idx = idx + 1
+            if next_idx < len(phases):
+                next_name = phases[next_idx].get("name", "Next Phase")
+                btn_label = f"Continue to {next_name}"
+            else:
+                btn_label = "Continue to Finish"
+            self._show_continue_btn(label=btn_label)
 
         elif etype == "recording_status":
             if event.get("recording"):
@@ -1911,9 +2089,25 @@ class IrisApp(ctk.CTk):
             self.tabview.set("Calibration")
             self._show_continue_btn()
 
+        elif etype == "experiment_done_choice":
+            self._hide_continue_btn()
+            self._hide_video_player()
+            # Show completion screen with two choices
+            self._phase_display_name.configure(text="Experiment Complete")
+            self._phase_display_desc.configure(
+                text="Recording and post-processing finished.\nChoose what to do next."
+            )
+            self._phase_display_progress.set(1.0)
+            self._phase_display_stop.pack_forget()
+            self._show_done_choice_buttons()
+
         elif etype == "experiment_complete":
             self._progress_label.configure(text="Experiment complete!")
+            self._phase_display_name.configure(text="Experiment Complete")
+            self._phase_display_desc.configure(text="All phases finished successfully.")
+            self._phase_display_progress.set(1.0)
             self._hide_continue_btn()
+            self._hide_done_choice_buttons()
             self._hide_video_player()
             self._save_console_log()
 
