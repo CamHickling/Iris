@@ -79,7 +79,7 @@ _PHASE_CHECKLISTS = {
         "GoPro recording stopped",
     ],
     "finish": [
-        "Stop recording heart rate data",
+        "I want to stop recording participant heart rate",
     ],
 }
 
@@ -2492,7 +2492,7 @@ class IrisApp(ctk.CTk):
                 next_name = phases[next_idx].get("name", "Next Phase")
                 btn_label = f"Continue to {next_name}"
             else:
-                btn_label = "Continue to Finish"
+                btn_label = "Finish Experiment"
             self._show_continue_btn(label=btn_label)
 
         elif etype == "recording_status":

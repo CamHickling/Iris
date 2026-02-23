@@ -78,6 +78,7 @@ class Experiment:
 
         self._skip_remaining = False
         self._redo_requested = False
+        self._hr_saved = False
 
         # Synchronization event log — timestamped record of every key moment
         self._sync_log = []
@@ -234,26 +235,27 @@ class Experiment:
             self._log_sync("overhead_recorder_stop_safety")
             self._overhead_recorder = None
 
-        # Stop Polar H10 recording and save data
+        # Stop Polar H10 recording and save data (skip if already done in _run_finish)
         if self.hr_monitor:
-            self._log_sync("hr_stop_recording")
-            self.hr_monitor.stop_recording()
-            hr_dir = self._session_dir / "heart_rate"
-            hr_dir.mkdir(parents=True, exist_ok=True)
-            hr_path = hr_dir / "hr_full_session.csv"
-            self.hr_monitor.save_to_csv(hr_path)
-            ecg_path = hr_dir / "ecg_full_session.csv"
-            self.hr_monitor.save_ecg_to_csv(ecg_path)
-            summary = self.hr_monitor.get_summary()
-            if summary:
-                print("\nPolar H10 Summary by Phase:")
-                for phase, stats in summary.items():
-                    rr_info = ""
-                    if "avg_rr_ms" in stats:
-                        rr_info = f", avg_rr={stats['avg_rr_ms']}ms ({stats['rr_count']} beats)"
-                    print(f"  {phase}: avg={stats['avg_bpm']} bpm, "
-                          f"min={stats['min_bpm']}, max={stats['max_bpm']}, "
-                          f"samples={stats['count']}{rr_info}")
+            if not self._hr_saved:
+                self._log_sync("hr_stop_recording")
+                self.hr_monitor.stop_recording()
+                hr_dir = self._session_dir / "heart_rate"
+                hr_dir.mkdir(parents=True, exist_ok=True)
+                hr_path = hr_dir / "hr_full_session.csv"
+                self.hr_monitor.save_to_csv(hr_path)
+                ecg_path = hr_dir / "ecg_full_session.csv"
+                self.hr_monitor.save_ecg_to_csv(ecg_path)
+                summary = self.hr_monitor.get_summary()
+                if summary:
+                    print("\nPolar H10 Summary by Phase:")
+                    for phase, stats in summary.items():
+                        rr_info = ""
+                        if "avg_rr_ms" in stats:
+                            rr_info = f", avg_rr={stats['avg_rr_ms']}ms ({stats['rr_count']} beats)"
+                        print(f"  {phase}: avg={stats['avg_bpm']} bpm, "
+                              f"min={stats['min_bpm']}, max={stats['max_bpm']}, "
+                              f"samples={stats['count']}{rr_info}")
             self.hr_monitor.disconnect()
 
         # Stop GoPro recording first, then disconnect
@@ -858,11 +860,43 @@ class Experiment:
         phase.complete()
 
     def _run_finish(self, phase: Phase):
-        """Phase 7: Stop HR. Run compositing."""
+        """Phase 7: Wait for checklist, stop HR, save data, run compositing."""
         if self.hr_monitor and self.hr_enabled:
             self.hr_monitor.set_phase("finish")
 
+        # Wait for user to confirm they want to stop HR (checklist gates Continue)
+        self._send_gui_event("wait_for_continue",
+                             message="Check the requirement below, then press Finish Experiment.")
+        print("Waiting for user to confirm HR stop...")
+        result = self._wait_for_user_action("continue")
+        if self._redo_requested:
+            return
+
+        # --- Stop HR recording and save data ---
+        self._log_sync("hr_stop_in_finish")
+        if self.hr_monitor:
+            self.hr_monitor.stop_recording()
+            hr_dir = self._session_dir / "heart_rate"
+            hr_dir.mkdir(parents=True, exist_ok=True)
+            hr_path = hr_dir / "hr_full_session.csv"
+            self.hr_monitor.save_to_csv(hr_path)
+            ecg_path = hr_dir / "ecg_full_session.csv"
+            self.hr_monitor.save_ecg_to_csv(ecg_path)
+            summary = self.hr_monitor.get_summary()
+            if summary:
+                print("\nPolar H10 Summary by Phase:")
+                for ph, stats in summary.items():
+                    rr_info = ""
+                    if "avg_rr_ms" in stats:
+                        rr_info = f", avg_rr={stats['avg_rr_ms']}ms ({stats['rr_count']} beats)"
+                    print(f"  {ph}: avg={stats['avg_bpm']} bpm, "
+                          f"min={stats['min_bpm']}, max={stats['max_bpm']}, "
+                          f"samples={stats['count']}{rr_info}")
+            self._hr_saved = True
+
+        # --- Post-Processing ---
         print("\n--- Post-Processing ---")
+        self._send_gui_event("status", message="Running post-processing...")
 
         hr_csv = self._session_dir / "heart_rate" / "hr_full_session.csv"
         composited_dir = self._session_dir / "composited"
@@ -908,28 +942,7 @@ class Experiment:
             print("Skipping HR overlay (no HR data)")
 
         print("Post-processing complete.")
-
-        # Ask user: end now or go to calibration tab?
-        self._send_gui_event("experiment_done_choice")
-        print("Waiting for user choice...")
-        while True:
-            try:
-                action = self._user_action_queue.get(timeout=0.5)
-            except queue.Empty:
-                continue
-            if action.get("type") == "stop":
-                raise KeyboardInterrupt("User stopped experiment")
-            if action.get("type") == "redo":
-                self._redo_requested = True
-                return
-            if action.get("type") in ("end_experiment", "continue_posthoc"):
-                if action.get("type") == "continue_posthoc":
-                    print("User chose to open Calibration tab after ending.")
-                else:
-                    print("User chose to end experiment.")
-                self._skip_remaining = True
-                phase.complete()
-                return
+        phase.complete()
 
     # ======================================================================
     #  Main Loop
