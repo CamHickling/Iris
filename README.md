@@ -1,6 +1,10 @@
-# Iris
+<p align="center">
+  <img src="logo.png" alt="Iris logo" width="200">
+</p>
 
-Multi-camera experiment capture tool with phase-based workflows.
+<h1 align="center">Iris</h1>
+
+<p align="center">Multi-camera experiment capture tool with phase-based workflows.</p>
 
 ## Overview
 
