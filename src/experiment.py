@@ -7,6 +7,7 @@ separately from the Calibration tab.
 
 import json
 import queue
+import shutil
 import time
 from pathlib import Path
 from typing import Optional
@@ -159,6 +160,37 @@ class Experiment:
 
         return True
 
+    def _backup_to_f_drive(self):
+        """Copy the session folder to F:/Iris_Recorded_Taekwondo_Data/ as a backup."""
+        if self._session_dir is None or not self._session_dir.exists():
+            print("No session directory to back up.")
+            return
+
+        backup_root = Path("F:/Iris_Recorded_Taekwondo_Data")
+        try:
+            # Check if F: drive is available
+            if not Path("F:/").exists():
+                print("WARNING: F: drive not found. Skipping backup.")
+                return
+
+            backup_dest = backup_root / self._session_dir.name
+            print(f"\n--- Backing Up to F: Drive ---")
+            print(f"Source:      {self._session_dir}")
+            print(f"Destination: {backup_dest}")
+
+            backup_root.mkdir(parents=True, exist_ok=True)
+
+            # Remove existing backup of this session if present
+            if backup_dest.exists():
+                shutil.rmtree(backup_dest)
+
+            shutil.copytree(str(self._session_dir), str(backup_dest))
+            print(f"Backup complete: {backup_dest}")
+
+        except Exception as e:
+            print(f"WARNING: Backup to F: drive failed: {e}")
+            print("Primary data is still safe in the output directory.")
+
     def teardown(self):
         """Clean up all resources."""
         print("\n--- Tearing Down Experiment ---")
@@ -200,6 +232,9 @@ class Experiment:
 
         # Close USB cameras
         self.camera_manager.close_all()
+
+        # Backup session data to F: drive
+        self._backup_to_f_drive()
 
         print("Teardown complete")
 
@@ -499,6 +534,7 @@ class Experiment:
         self._send_gui_event("show_video_player", allow_pause=True,
                              message="Review overhead video. Use Pause/Play for commentary.",
                              title="Narrating Review")
+        self._send_gui_event("recording_status", recording=True, cameras=["face"])
 
         # Main review loop
         video_finished = False
@@ -553,6 +589,8 @@ class Experiment:
         if audio_recorder:
             audio_recorder.stop_recording()
             audio_recorder.close()
+
+        self._send_gui_event("recording_status", recording=False)
 
         # Save timestamps
         with open(timestamps_path, "w") as f:
@@ -613,6 +651,7 @@ class Experiment:
         self._send_gui_event("show_video_player", allow_pause=False,
                              message="Scoring: Press Start to begin. Face camera is recording.",
                              title="Self-Scoring")
+        self._send_gui_event("recording_status", recording=True, cameras=["face"])
 
         video_finished = False
 
@@ -647,6 +686,8 @@ class Experiment:
                 self._send_gui_event("player_progress",
                                      position_sec=player.position_sec,
                                      duration_sec=player.duration_sec)
+
+        self._send_gui_event("recording_status", recording=False)
 
         player.stop()
         player.close()

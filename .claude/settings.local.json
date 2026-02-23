@@ -46,7 +46,8 @@
       "Bash(powershell.exe -NoProfile -Command 'Get-NetIPAddress -InterfaceIndex 32 -AddressFamily IPv4 | Format-List IPAddress,PrefixLength')",
       "Bash(git push:*)",
       "Bash(pip uninstall:*)",
-      "Bash(powershell -Command \"Get-PnpDevice -Class Camera -Status OK | Format-Table Name, InstanceId -AutoSize\")"
+      "Bash(powershell -Command \"Get-PnpDevice -Class Camera -Status OK | Format-Table Name, InstanceId -AutoSize\")",
+      "Bash(grep:*)"
     ]
   }
 }
