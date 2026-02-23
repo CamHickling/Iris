@@ -2433,6 +2433,12 @@ class IrisApp(ctk.CTk):
                 self._phase_display.grid_forget()
                 self._vp_canvas.configure(image=None, text="", font=FONT_BODY)
                 self._vp_frame.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
+            else:
+                # Restore normal experiment layout if coming from a video phase
+                self._vp_frame.grid_forget()
+                if self._experiment_layout_active:
+                    self._exp_left.grid(row=0, column=0, padx=(0, 8), pady=8, sticky="nsew")
+                    self._phase_display.grid(row=0, column=1, padx=(8, 0), pady=8, sticky="nsew")
 
         elif etype == "camera_selection":
             self._show_camera_selection(
