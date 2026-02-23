@@ -72,6 +72,7 @@ _PHASE_CHECKLISTS = {
         "Microphone is on",
         "Intrinsic calibration checkerboarding complete",
         "Extrinsic calibration checkerboarding complete",
+        "Participant T-pose in the middle of the mat",
     ],
     "performance": [
         "Participant has completed all movements",
@@ -491,18 +492,18 @@ class IrisApp(ctk.CTk):
         )
         self._cal_btn.pack(fill="x", pady=6)
 
-        self._stop_btn = ctk.CTkButton(
+        self._redo_btn = ctk.CTkButton(
             btn_f,
-            text="Stop",
+            text="Redo Last Phase",
             font=FONT_BTN,
             text_color="white",
-            fg_color=CLR_RED,
-            hover_color=CLR_RED_H,
+            fg_color=CLR_ORANGE,
+            hover_color=CLR_ORANGE_H,
             height=60,
-            command=self._stop_experiment,
+            command=self._redo_last_phase,
             state="disabled",
         )
-        self._stop_btn.pack(fill="x", pady=6)
+        self._redo_btn.pack(fill="x", pady=6)
 
         # Progress section
         prog_f = ctk.CTkFrame(right, fg_color="transparent")
@@ -601,16 +602,16 @@ class IrisApp(ctk.CTk):
         )
         # Not packed initially — shown/hidden dynamically
 
-        self._phase_display_stop = ctk.CTkButton(
+        self._phase_display_redo = ctk.CTkButton(
             pd_btn_frame,
-            text="Stop Experiment",
+            text="Redo Last Phase",
             font=FONT_BODY,
-            fg_color=CLR_RED,
-            hover_color=CLR_RED_H,
+            fg_color=CLR_ORANGE,
+            hover_color=CLR_ORANGE_H,
             height=45,
-            command=self._stop_experiment,
+            command=self._redo_last_phase,
         )
-        self._phase_display_stop.pack(fill="x", pady=(5, 0))
+        self._phase_display_redo.pack(fill="x", pady=(5, 0))
 
         # Done-choice buttons (shown after finish phase)
         self._done_end_btn = ctk.CTkButton(
@@ -1652,8 +1653,8 @@ class IrisApp(ctk.CTk):
 
         # Clean up any choice buttons that may still be visible
         self._hide_done_choice_buttons()
-        self._phase_display_stop.pack_forget()
-        self._phase_display_stop.pack(fill="x", pady=(5, 0))
+        self._phase_display_redo.pack_forget()
+        self._phase_display_redo.pack(fill="x", pady=(5, 0))
 
         # Rebuild left panel pack order exactly as built
         self._exp_settings_frame.pack_forget()
@@ -1830,7 +1831,7 @@ class IrisApp(ctk.CTk):
             self._phase_display_continue.configure(state="normal")
         self._continue_btn.pack(fill="x", pady=(10, 0))
         # Pack continue above stop in the phase display button frame
-        self._phase_display_continue.pack(fill="x", pady=(0, 5), before=self._phase_display_stop)
+        self._phase_display_continue.pack(fill="x", pady=(0, 5), before=self._phase_display_redo)
 
     def _hide_continue_btn(self):
         """Hide Continue buttons."""
@@ -2146,6 +2147,14 @@ class IrisApp(ctk.CTk):
 
         threading.Thread(target=worker, daemon=True).start()
 
+    def _redo_last_phase(self):
+        """User clicked Redo Last Phase — go back and re-run the previous phase."""
+        if not self._is_running:
+            return
+        self._log("Redo last phase requested")
+        self._progress_label.configure(text="Restarting previous phase...")
+        self._user_action_queue.put({"type": "redo"})
+
     def _stop_experiment(self):
         if not self._is_running:
             return
@@ -2178,7 +2187,7 @@ class IrisApp(ctk.CTk):
             self._cal_btn.configure(state=state_off)
             self._undist_btn.configure(state=state_off)
             self._run_cal_btn.configure(state=state_off)
-            self._stop_btn.configure(state=state_on)
+            self._redo_btn.configure(state=state_on)
             self._status_label.configure(text="Running...", text_color=CLR_GREEN)
         else:
             # Only re-enable Run Experiment if calibration has been done
@@ -2187,7 +2196,7 @@ class IrisApp(ctk.CTk):
             self._cal_btn.configure(state=state_on)
             self._undist_btn.configure(state=state_on)
             self._run_cal_btn.configure(state=state_on)
-            self._stop_btn.configure(state=state_off)
+            self._redo_btn.configure(state=state_off)
             self._status_label.configure(text="Ready", text_color="white")
             self._hide_continue_btn()
 
@@ -2445,6 +2454,10 @@ class IrisApp(ctk.CTk):
             self._hide_video_player()
 
         elif etype == "video_frame":
+            # Discard frames while waiting for first play or during countdown
+            # so the instructional text stays visible
+            if self._video_first_play or self._countdown_active:
+                return
             frame = event.get("frame")
             if frame is not None:
                 self._update_video_frame(frame)
@@ -2503,7 +2516,7 @@ class IrisApp(ctk.CTk):
                 text="Recording and post-processing finished.\nChoose what to do next."
             )
             self._phase_display_progress.set(1.0)
-            self._phase_display_stop.pack_forget()
+            self._phase_display_redo.pack_forget()
             self._show_done_choice_buttons()
 
         elif etype == "experiment_complete":
