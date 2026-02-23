@@ -77,6 +77,7 @@ class Experiment:
         self._user_action_queue = user_action_queue or queue.Queue()
 
         self._skip_remaining = False
+        self._redo_requested = False
 
         # Synchronization event log — timestamped record of every key moment
         self._sync_log = []
@@ -128,6 +129,9 @@ class Experiment:
                     return action
                 if action.get("type") == "stop":
                     raise KeyboardInterrupt("User stopped experiment")
+                if action.get("type") == "redo":
+                    self._redo_requested = True
+                    return None
             except queue.Empty:
                 continue
 
@@ -313,18 +317,40 @@ class Experiment:
         phase.complete()
 
     def _run_heart_rate_start(self, phase: Phase):
-        """Phase 2: Connect Polar H10, start recording, auto-advance."""
+        """Phase 2: Connect Polar H10, start recording, auto-advance.
+
+        If HR is enabled, retries connection until successful.  The experimenter
+        cannot advance past this phase without a streaming HR monitor.
+        """
         if self.hr_monitor and self.hr_enabled:
-            print("\n--- Connecting Polar H10 ---")
-            self._log_sync("hr_connect_attempt")
-            if not self.hr_monitor.connect():
-                print("WARNING: Polar H10 connection failed. Continuing without HR.")
-                self._log_sync("hr_connect_failed")
-                self.hr_enabled = False
-            else:
-                self._log_sync("hr_connect_success")
-                self.hr_monitor.start_recording(phase="heart_rate_start")
-                self._log_sync("hr_recording_start", phase="heart_rate_start")
+            connected = False
+            attempt = 0
+            while not connected:
+                attempt += 1
+                print(f"\n--- Connecting Polar H10 (attempt {attempt}) ---")
+                self._send_gui_event("status",
+                                     message=f"Connecting Polar H10 (attempt {attempt})...")
+                self._log_sync("hr_connect_attempt", attempt=attempt)
+                if self.hr_monitor.connect():
+                    connected = True
+                    self._log_sync("hr_connect_success")
+                    self.hr_monitor.start_recording(phase="heart_rate_start")
+                    self._log_sync("hr_recording_start", phase="heart_rate_start")
+                    self._send_gui_event("status",
+                                         message="Polar H10 connected and streaming.")
+                    print("Polar H10 connected and streaming.")
+                else:
+                    self._log_sync("hr_connect_failed", attempt=attempt)
+                    print(f"Polar H10 connection failed (attempt {attempt}). Retrying in 3s...")
+                    self._send_gui_event("status",
+                                         message=f"HR connection failed (attempt {attempt}). Retrying...")
+                    # Check for stop during retry delay
+                    try:
+                        action = self._user_action_queue.get(timeout=3.0)
+                        if action.get("type") == "stop":
+                            raise KeyboardInterrupt("User stopped experiment")
+                    except queue.Empty:
+                        pass
         else:
             print("Heart rate monitoring disabled.")
 
@@ -451,6 +477,15 @@ class Experiment:
                     self._overhead_recorder = None
                 self._send_gui_event("recording_status", recording=False)
                 raise KeyboardInterrupt("User stopped experiment")
+            if action.get("type") == "redo":
+                if self.gopro_mode == "auto":
+                    self.gopro_manager.stop_recording_all()
+                if self._overhead_recorder:
+                    self._overhead_recorder.stop()
+                    self._overhead_recorder = None
+                self._send_gui_event("recording_status", recording=False)
+                self._redo_requested = True
+                return
             if action.get("type") == "continue":
                 break
 
@@ -500,9 +535,18 @@ class Experiment:
                 action = self._user_action_queue.get(timeout=1.0)
             except queue.Empty:
                 continue
-            if action and action.get("type") in ("continue", "stop"):
-                if action.get("type") == "stop":
-                    raise KeyboardInterrupt("User stopped experiment")
+            if action and action.get("type") == "stop":
+                raise KeyboardInterrupt("User stopped experiment")
+            if action and action.get("type") == "redo":
+                if self._overhead_recorder:
+                    self._overhead_recorder.stop()
+                    self._overhead_recorder = None
+                if self.gopro_mode == "auto":
+                    self.gopro_manager.stop_recording_all()
+                self._send_gui_event("recording_status", recording=False)
+                self._redo_requested = True
+                return
+            if action and action.get("type") == "continue":
                 break
 
         # Stop overhead recording (was running since warmup_calibration)
@@ -624,6 +668,18 @@ class Experiment:
             action_type = action.get("type")
             if action_type == "stop":
                 raise KeyboardInterrupt("User stopped experiment")
+            elif action_type == "redo":
+                player.stop()
+                player.close()
+                if face_recorder:
+                    face_recorder.stop()
+                if audio_recorder:
+                    audio_recorder.stop_recording()
+                    audio_recorder.close()
+                self._send_gui_event("recording_status", recording=False)
+                self._send_gui_event("hide_video_player")
+                self._redo_requested = True
+                return
             elif action_type == "play":
                 player.play()
                 if face_recorder and face_recorder.is_paused:
@@ -739,6 +795,17 @@ class Experiment:
 
         player.on_complete = mark_complete
 
+        def _cleanup_scoring():
+            player.stop()
+            player.close()
+            if face_recorder:
+                face_recorder.stop()
+            if audio_recorder:
+                audio_recorder.stop_recording()
+                audio_recorder.close()
+            self._send_gui_event("recording_status", recording=False)
+            self._send_gui_event("hide_video_player")
+
         # Wait for user to press Start (GUI handles countdown, then sends "play")
         print("Scoring phase: Waiting for user to start...")
         while True:
@@ -748,6 +815,10 @@ class Experiment:
                 continue
             if action.get("type") == "stop":
                 raise KeyboardInterrupt("User stopped experiment")
+            if action.get("type") == "redo":
+                _cleanup_scoring()
+                self._redo_requested = True
+                return
             if action.get("type") == "play":
                 player.play()
                 self._log_sync("scoring_playback_start")
@@ -759,6 +830,10 @@ class Experiment:
                 action = self._user_action_queue.get(timeout=0.5)
                 if action.get("type") == "stop":
                     raise KeyboardInterrupt("User stopped experiment")
+                if action.get("type") == "redo":
+                    _cleanup_scoring()
+                    self._redo_requested = True
+                    return
                 if action.get("type") == "continue":
                     break
             except queue.Empty:
@@ -844,6 +919,9 @@ class Experiment:
                 continue
             if action.get("type") == "stop":
                 raise KeyboardInterrupt("User stopped experiment")
+            if action.get("type") == "redo":
+                self._redo_requested = True
+                return
             if action.get("type") in ("end_experiment", "continue_posthoc"):
                 if action.get("type") == "continue_posthoc":
                     print("User chose to open Calibration tab after ending.")
@@ -906,6 +984,28 @@ class Experiment:
                                          message=f"Phase: {phase.config.name}. Press Continue.")
                     self._wait_for_user_action("continue")
                     phase.complete()
+
+                # Handle redo: go back one phase and re-run
+                if self._redo_requested:
+                    self._redo_requested = False
+                    if self.current_phase_index > 0:
+                        self.current_phase_index -= 1
+                    prev = self.current_phase
+                    prev.start()
+                    self._log_sync("phase_redo",
+                                   phase_id=prev.config.id,
+                                   phase_name=prev.config.name,
+                                   phase_index=self.current_phase_index)
+                    if self.hr_monitor and self.hr_enabled:
+                        self.hr_monitor.set_phase(prev.config.id)
+                    self._send_gui_event(
+                        "phase_change",
+                        phase_index=self.current_phase_index,
+                        phase_id=prev.config.id,
+                        phase_name=prev.config.name,
+                        total_phases=len(self.phases),
+                    )
+                    continue
 
                 if self._skip_remaining:
                     break
