@@ -408,26 +408,6 @@ class Experiment:
         else:
             print(f"Skipping camera selection ({len(open_cameras)} cameras open, need 2).")
 
-        # Start overhead camera recording (continuous through performance)
-        overhead_cam = self.camera_manager.get_camera_by_role("overhead")
-        if overhead_cam is None:
-            print("WARNING: No overhead camera found by role, using first available")
-            if self.camera_manager.cameras:
-                overhead_cam = next(iter(self.camera_manager.cameras.values()))
-
-        overhead_path = str(self._session_dir / "performance" / "overhead_camera.mp4")
-        if overhead_cam and overhead_cam.is_open:
-            print(f"OVERHEAD CAM selected: '{overhead_cam.config.name}' "
-                  f"(device_index={overhead_cam.config.device_index}, role={overhead_cam.config.role})")
-            self._overhead_recorder = VideoRecorder(
-                overhead_cam, overhead_path, fps=overhead_cam.config.fps
-            )
-            self._overhead_recorder.start()
-            self._log_sync("overhead_recorder_start",
-                           file="performance/overhead_camera.mp4",
-                           fps=overhead_cam.config.fps)
-            print(f"Overhead recording started (continuous through performance)")
-
         # Test microphone
         if self.mic_enabled:
             print("\n--- Testing Microphone ---")
@@ -455,16 +435,16 @@ class Experiment:
             print("\nGoPros are recording. Please stand in T-pose facing the front camera.")
             print("Ensure the checkerboard is visible to all cameras if doing extrinsic calibration.")
             self._send_gui_event("wait_for_continue",
-                                 message="GoPros recording. Press Continue when calibration is done.")
+                                 message="Stand in T-pose facing the front camera. Press Continue when done.")
         else:
             print("\n--- GoPro Mode: MANUAL ---")
             print("Please start GoPro recording manually now.")
             print("Stand in T-pose facing the front camera for calibration.")
             self._send_gui_event("wait_for_continue",
-                                 message="MANUAL MODE: Start GoPros yourself. Press Continue when done.")
+                                 message="MANUAL MODE: Start GoPros yourself. Stand in T-pose. Press Continue when done.")
 
-        # Wait for user to press Continue, sending keep-alives while waiting
-        print("Waiting for user to continue...")
+        # Wait for T-pose to finish
+        print("Waiting for T-pose to complete...")
         while True:
             self._send_keepalive()
             try:
@@ -474,24 +454,47 @@ class Experiment:
             if action.get("type") == "stop":
                 if self.gopro_mode == "auto":
                     self.gopro_manager.stop_recording_all()
-                if self._overhead_recorder:
-                    self._overhead_recorder.stop()
-                    self._overhead_recorder = None
                 self._send_gui_event("recording_status", recording=False)
                 raise KeyboardInterrupt("User stopped experiment")
             if action.get("type") == "redo":
                 if self.gopro_mode == "auto":
                     self.gopro_manager.stop_recording_all()
-                if self._overhead_recorder:
-                    self._overhead_recorder.stop()
-                    self._overhead_recorder = None
                 self._send_gui_event("recording_status", recording=False)
                 self._redo_requested = True
                 return
             if action.get("type") == "continue":
                 break
 
-        # Stop GoPro recording after calibration (overhead keeps recording)
+        # Ask Angela to clap to align the cameras
+        print("\nAngela, please perform a single clap to align the cameras.")
+        self._send_gui_event("wait_for_continue",
+                             message="Angela, please clap to align the cameras. Press Continue when done.")
+        self._log_sync("clap_sync_requested")
+
+        # Wait for clap to finish
+        print("Waiting for clap sync to complete...")
+        while True:
+            self._send_keepalive()
+            try:
+                action = self._user_action_queue.get(timeout=1.0)
+            except queue.Empty:
+                continue
+            if action.get("type") == "stop":
+                if self.gopro_mode == "auto":
+                    self.gopro_manager.stop_recording_all()
+                self._send_gui_event("recording_status", recording=False)
+                raise KeyboardInterrupt("User stopped experiment")
+            if action.get("type") == "redo":
+                if self.gopro_mode == "auto":
+                    self.gopro_manager.stop_recording_all()
+                self._send_gui_event("recording_status", recording=False)
+                self._redo_requested = True
+                return
+            if action.get("type") == "continue":
+                self._log_sync("clap_sync_done")
+                break
+
+        # Stop GoPro recording after calibration
         if self.gopro_mode == "auto":
             print("\n--- Stopping GoPro Recording (Calibration) ---")
             self.gopro_manager.stop_recording_all()
@@ -504,12 +507,31 @@ class Experiment:
         phase.complete()
 
     def _run_performance(self, phase: Phase):
-        """Phase 4: Record overhead video + GoPros simultaneously.
-
-        Overhead camera recording was started in warmup_calibration and continues here.
-        """
+        """Phase 4: Record overhead video + GoPros simultaneously."""
         if self.hr_monitor and self.hr_enabled:
             self.hr_monitor.set_phase("performance")
+
+        # Start overhead camera recording
+        overhead_cam = self.camera_manager.get_camera_by_role("overhead")
+        if overhead_cam is None:
+            print("WARNING: No overhead camera found by role, using first available")
+            if self.camera_manager.cameras:
+                overhead_cam = next(iter(self.camera_manager.cameras.values()))
+
+        overhead_path = str(self._session_dir / "performance" / "overhead_camera.mp4")
+        if overhead_cam and overhead_cam.is_open:
+            print(f"OVERHEAD CAM selected: '{overhead_cam.config.name}' "
+                  f"(device_index={overhead_cam.config.device_index}, role={overhead_cam.config.role})")
+            self._overhead_recorder = VideoRecorder(
+                overhead_cam, overhead_path, fps=overhead_cam.config.fps
+            )
+            self._overhead_recorder.start()
+            self._log_sync("overhead_recorder_start",
+                           file="performance/overhead_camera.mp4",
+                           fps=overhead_cam.config.fps)
+            print("Overhead recording started")
+        else:
+            print("WARNING: No overhead camera available for recording")
 
         # Start GoPro recording
         if self.gopro_mode == "auto":
@@ -518,12 +540,6 @@ class Experiment:
         else:
             print("MANUAL MODE: Ensure GoPros are recording.")
             self._log_sync("gopro_manual_start_prompted", purpose="performance")
-
-        recording_active = self._overhead_recorder is not None
-        if recording_active:
-            print("Overhead camera continuing to record (started in calibration)")
-        else:
-            print("WARNING: No overhead recorder active")
 
         self._send_gui_event("wait_for_continue", message="Recording in progress. Press Continue when done.")
         self._send_gui_event("recording_status", recording=True, cameras=["overhead"], gopros=True)
@@ -551,7 +567,7 @@ class Experiment:
             if action and action.get("type") == "continue":
                 break
 
-        # Stop overhead recording (was running since warmup_calibration)
+        # Stop overhead recording
         if self._overhead_recorder:
             self._log_sync("overhead_recorder_stop",
                            file="performance/overhead_camera.mp4")

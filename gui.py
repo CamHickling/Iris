@@ -73,6 +73,7 @@ _PHASE_CHECKLISTS = {
         "Intrinsic calibration checkerboarding complete",
         "Extrinsic calibration checkerboarding complete",
         "Participant T-pose in the middle of the mat",
+        "Angela clap to align the cameras",
     ],
     "performance": [
         "Participant has completed all movements",
