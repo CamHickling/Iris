@@ -78,6 +78,9 @@ class Experiment:
 
         self._skip_remaining = False
 
+        # Synchronization event log — timestamped record of every key moment
+        self._sync_log = []
+
         # Persistent recorder for overhead camera (spans calibration -> performance)
         self._overhead_recorder: Optional["VideoRecorder"] = None
 
@@ -146,6 +149,12 @@ class Experiment:
             self.gopro_manager.keep_alive_all()
             self._last_keepalive = now
 
+    def _log_sync(self, event: str, **extra):
+        """Append a timestamped event to the synchronization log."""
+        entry = {"event": event, "wall_time": time.time()}
+        entry.update(extra)
+        self._sync_log.append(entry)
+
     def setup(self) -> bool:
         """Initialize experiment resources."""
         print(f"Setting up experiment: {self.name}")
@@ -158,6 +167,7 @@ class Experiment:
         self._session_dir = self.output_dir / f"{self.name.replace(' ', '_')}_{self._session_timestamp}"
         self._session_dir.mkdir(parents=True, exist_ok=True)
 
+        self._log_sync("session_created", session_dir=str(self._session_dir))
         return True
 
     def _backup_to_f_drive(self):
@@ -191,18 +201,38 @@ class Experiment:
             print(f"WARNING: Backup to F: drive failed: {e}")
             print("Primary data is still safe in the output directory.")
 
+    def _save_sync_manifest(self):
+        """Write the synchronization manifest to the session directory."""
+        if not self._session_dir:
+            return
+        manifest = {
+            "session": str(self._session_dir.name),
+            "experiment_name": self.name,
+            "gopro_mode": self.gopro_mode,
+            "hr_enabled": self.hr_enabled,
+            "mic_enabled": self.mic_enabled,
+            "events": self._sync_log,
+        }
+        path = self._session_dir / "sync_manifest.json"
+        with open(path, "w") as f:
+            json.dump(manifest, f, indent=2)
+        print(f"Sync manifest saved to {path}")
+
     def teardown(self):
         """Clean up all resources."""
         print("\n--- Tearing Down Experiment ---")
+        self._log_sync("teardown_start")
 
         # Stop overhead recorder if still active (safety net)
         if self._overhead_recorder:
             print("Stopping overhead recorder...")
             self._overhead_recorder.stop()
+            self._log_sync("overhead_recorder_stop_safety")
             self._overhead_recorder = None
 
         # Stop Polar H10 recording and save data
         if self.hr_monitor:
+            self._log_sync("hr_stop_recording")
             self.hr_monitor.stop_recording()
             hr_dir = self._session_dir / "heart_rate"
             hr_dir.mkdir(parents=True, exist_ok=True)
@@ -233,6 +263,9 @@ class Experiment:
         # Close USB cameras
         self.camera_manager.close_all()
 
+        self._log_sync("teardown_complete")
+        self._save_sync_manifest()
+
         # Backup session data to F: drive
         self._backup_to_f_drive()
 
@@ -245,6 +278,10 @@ class Experiment:
             return False
         phase = self.current_phase
         phase.start()
+        self._log_sync("phase_start",
+                       phase_id=phase.config.id,
+                       phase_name=phase.config.name,
+                       phase_index=self.current_phase_index)
         # Update heart rate phase label
         if self.hr_monitor and self.hr_enabled:
             self.hr_monitor.set_phase(phase.config.id)
@@ -279,11 +316,15 @@ class Experiment:
         """Phase 2: Connect Polar H10, start recording, auto-advance."""
         if self.hr_monitor and self.hr_enabled:
             print("\n--- Connecting Polar H10 ---")
+            self._log_sync("hr_connect_attempt")
             if not self.hr_monitor.connect():
                 print("WARNING: Polar H10 connection failed. Continuing without HR.")
+                self._log_sync("hr_connect_failed")
                 self.hr_enabled = False
             else:
+                self._log_sync("hr_connect_success")
                 self.hr_monitor.start_recording(phase="heart_rate_start")
+                self._log_sync("hr_recording_start", phase="heart_rate_start")
         else:
             print("Heart rate monitoring disabled.")
 
@@ -354,6 +395,9 @@ class Experiment:
                 overhead_cam, overhead_path, fps=overhead_cam.config.fps
             )
             self._overhead_recorder.start()
+            self._log_sync("overhead_recorder_start",
+                           file="performance/overhead_camera.mp4",
+                           fps=overhead_cam.config.fps)
             print(f"Overhead recording started (continuous through performance)")
 
         # Test microphone
@@ -377,6 +421,7 @@ class Experiment:
             # Start GoPro recording for calibration footage
             print("\n--- Starting GoPro Recording (Calibration) ---")
             self.gopro_manager.start_recording_all()
+            self._log_sync("gopro_recording_start", purpose="calibration")
             self._send_gui_event("recording_status", recording=True, gopros=True)
 
             print("\nGoPros are recording. Please stand in T-pose facing the front camera.")
@@ -413,8 +458,10 @@ class Experiment:
         if self.gopro_mode == "auto":
             print("\n--- Stopping GoPro Recording (Calibration) ---")
             self.gopro_manager.stop_recording_all()
+            self._log_sync("gopro_recording_stop", purpose="calibration")
         else:
             print("\nPlease stop GoPro recording manually now.")
+            self._log_sync("gopro_manual_stop_prompted", purpose="calibration")
         self._send_gui_event("recording_status", recording=False)
 
         phase.complete()
@@ -430,8 +477,10 @@ class Experiment:
         # Start GoPro recording
         if self.gopro_mode == "auto":
             self.gopro_manager.start_recording_all()
+            self._log_sync("gopro_recording_start", purpose="performance")
         else:
             print("MANUAL MODE: Ensure GoPros are recording.")
+            self._log_sync("gopro_manual_start_prompted", purpose="performance")
 
         recording_active = self._overhead_recorder is not None
         if recording_active:
@@ -458,13 +507,17 @@ class Experiment:
 
         # Stop overhead recording (was running since warmup_calibration)
         if self._overhead_recorder:
+            self._log_sync("overhead_recorder_stop",
+                           file="performance/overhead_camera.mp4")
             self._overhead_recorder.stop()
             self._overhead_recorder = None
 
         if self.gopro_mode == "auto":
             self.gopro_manager.stop_recording_all()
+            self._log_sync("gopro_recording_stop", purpose="performance")
         else:
             print("MANUAL MODE: Please stop GoPro recording now.")
+            self._log_sync("gopro_manual_stop_prompted", purpose="performance")
 
         self._send_gui_event("recording_status", recording=False)
         phase.complete()
@@ -494,6 +547,10 @@ class Experiment:
                   f"(device_index={face_cam.config.device_index}, role={face_cam.config.role})")
             face_recorder = PausableVideoRecorder(face_cam, face_video_path, fps=face_cam.config.fps)
             face_recorder.start()
+            self._log_sync("face_recorder_start",
+                           file="review/face_cam.mp4",
+                           fps=face_cam.config.fps,
+                           phase="review")
 
         # Set up audio recorder
         audio_recorder = None
@@ -501,6 +558,10 @@ class Experiment:
             audio_recorder = AudioRecorder(self.mic_config)
             if audio_recorder.open(audio_path):
                 audio_recorder.start_recording()
+                self._log_sync("audio_recorder_start",
+                               file="review/audio_commentary.wav",
+                               sample_rate=self.mic_config.sample_rate,
+                               phase="review")
             else:
                 audio_recorder = None
 
@@ -534,6 +595,9 @@ class Experiment:
         self._send_gui_event("show_video_player", allow_pause=True,
                              message="Review overhead video. Use Pause/Play for commentary.",
                              title="Narrating Review")
+        self._log_sync("review_video_player_shown",
+                       overhead_video="performance/overhead_camera.mp4",
+                       duration_sec=player.duration_sec)
         self._send_gui_event("recording_status", recording=True, cameras=["face"])
 
         # Main review loop
@@ -582,13 +646,16 @@ class Experiment:
                 break
 
         # Stop everything
+        self._log_sync("review_playback_stop")
         player.stop()
         player.close()
         if face_recorder:
             face_recorder.stop()
+            self._log_sync("face_recorder_stop", file="review/face_cam.mp4", phase="review")
         if audio_recorder:
             audio_recorder.stop_recording()
             audio_recorder.close()
+            self._log_sync("audio_recorder_stop", file="review/audio_commentary.wav", phase="review")
 
         self._send_gui_event("recording_status", recording=False)
 
@@ -624,6 +691,10 @@ class Experiment:
                   f"(device_index={face_cam.config.device_index}, role={face_cam.config.role})")
             face_recorder = VideoRecorder(face_cam, face_video_path, fps=face_cam.config.fps)
             face_recorder.start()
+            self._log_sync("face_recorder_start",
+                           file="scoring/face_cam.mp4",
+                           fps=face_cam.config.fps,
+                           phase="scoring")
 
         # Set up audio recorder
         audio_recorder = None
@@ -631,6 +702,10 @@ class Experiment:
             audio_recorder = AudioRecorder(self.mic_config)
             if audio_recorder.open(audio_path):
                 audio_recorder.start_recording()
+                self._log_sync("audio_recorder_start",
+                               file="scoring/audio_scoring.wav",
+                               sample_rate=self.mic_config.sample_rate,
+                               phase="scoring")
             else:
                 audio_recorder = None
 
@@ -651,6 +726,9 @@ class Experiment:
         self._send_gui_event("show_video_player", allow_pause=False,
                              message="Scoring: Press Start to begin. Face camera is recording.",
                              title="Self-Scoring")
+        self._log_sync("scoring_video_player_shown",
+                       overhead_video="performance/overhead_camera.mp4",
+                       duration_sec=player.duration_sec)
         self._send_gui_event("recording_status", recording=True, cameras=["face"])
 
         video_finished = False
@@ -672,6 +750,7 @@ class Experiment:
                 raise KeyboardInterrupt("User stopped experiment")
             if action.get("type") == "play":
                 player.play()
+                self._log_sync("scoring_playback_start")
                 break
 
         print("Scoring video playing...")
@@ -689,13 +768,16 @@ class Experiment:
 
         self._send_gui_event("recording_status", recording=False)
 
+        self._log_sync("scoring_playback_stop")
         player.stop()
         player.close()
         if face_recorder:
             face_recorder.stop()
+            self._log_sync("face_recorder_stop", file="scoring/face_cam.mp4", phase="scoring")
         if audio_recorder:
             audio_recorder.stop_recording()
             audio_recorder.close()
+            self._log_sync("audio_recorder_stop", file="scoring/audio_scoring.wav", phase="scoring")
 
         self._send_gui_event("hide_video_player")
         phase.complete()
@@ -783,7 +865,12 @@ class Experiment:
 
         try:
             print(f"\nStarting experiment with {len(self.phases)} phases")
+            self._log_sync("experiment_start", total_phases=len(self.phases))
             self.current_phase.start()
+            self._log_sync("phase_start",
+                           phase_id=self.current_phase.config.id,
+                           phase_name=self.current_phase.config.name,
+                           phase_index=0)
             if self.hr_monitor and self.hr_enabled:
                 self.hr_monitor.set_phase(self.current_phase.config.id)
 

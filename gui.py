@@ -70,6 +70,8 @@ _PHASE_CHECKLISTS = {
         "Overhead camera positioned",
         "Face camera positioned",
         "Microphone is on",
+        "Intrinsic calibration checkerboarding complete",
+        "Extrinsic calibration checkerboarding complete",
     ],
     "performance": [
         "Participant has completed all movements",
@@ -112,6 +114,14 @@ class IrisApp(ctk.CTk):
         self.attributes("-fullscreen", True)  # true fullscreen (no title bar/taskbar)
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
+
+        # Window icon
+        logo_path = Path(os.path.dirname(os.path.abspath(__file__))) / "logo.png"
+        if logo_path.exists() and PILImage:
+            from PIL import ImageTk
+            icon_img = PILImage.open(logo_path)
+            self._icon_photo = ImageTk.PhotoImage(icon_img)
+            self.iconphoto(True, self._icon_photo)
 
         # State
         self.settings = {}
