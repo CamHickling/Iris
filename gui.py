@@ -63,6 +63,23 @@ CAMERA_ROLES = ["overhead", "face", ""]
 
 FONT_COUNTDOWN = ("Segoe UI", 120, "bold")
 
+_PHASE_CHECKLISTS = {
+    "warmup_calibration": [
+        "GoPros are recording",
+        "Participant wearing HR monitor",
+        "Overhead camera positioned",
+        "Face camera positioned",
+        "Microphone is on",
+    ],
+    "performance": [
+        "Participant has completed all movements",
+        "GoPro recording stopped",
+    ],
+    "finish": [
+        "Stop recording heart rate data",
+    ],
+}
+
 
 # --- Stdout Redirector --------------------------------------------------------
 
@@ -147,6 +164,12 @@ class IrisApp(ctk.CTk):
         self._current_phase_index = 0
         self._experiment_layout_active = False
 
+        # Recording indicator state
+        self._rec_animating = False
+        self._rec_dot_step = 0
+        self._rec_start_time = 0.0
+        self._rec_timer_id = None
+
         self._load_settings()
         self._build_ui()
         self._populate_ui()
@@ -170,7 +193,7 @@ class IrisApp(ctk.CTk):
             self.settings = {
                 "experiment": {
                     "name": "Taekwondo Experiment",
-                    "output_dir": "./output",
+                    "output_dir": "C:/Users/BarlabPRIME/desktop/Iris_Recorded_Taekwondo_Data",
                     "recording_format": "mp4",
                 },
                 "cameras": [],
@@ -407,6 +430,15 @@ class IrisApp(ctk.CTk):
         self._device_status_frame = ctk.CTkFrame(left, fg_color="transparent")
         self._device_status_frame.pack(fill="both", expand=True, padx=25, pady=(0, 15))
 
+        # --- Advancement Checklist Section (hidden until experiment runs) ---
+        self._checklist_separator = ctk.CTkFrame(left, fg_color="gray30", height=2)
+        self._checklist_header = ctk.CTkLabel(
+            left, text="Advancement Requirements", font=FONT_SUB,
+        )
+        self._checklist_frame = ctk.CTkFrame(left, fg_color="transparent")
+        self._checklist_vars = []
+        # Not packed initially — shown during experiment via _update_checklist()
+
         # Right: actions
         self._exp_right = ctk.CTkFrame(parent)
         right = self._exp_right
@@ -504,6 +536,41 @@ class IrisApp(ctk.CTk):
             wraplength=800,
         )
         self._phase_display_desc.pack(fill="x", pady=(0, 10))
+
+        # --- Phase status indicator (IN PROGRESS) ---
+        self._phase_status_label = ctk.CTkLabel(
+            self._phase_display, text="", font=("Segoe UI", 22, "bold"),
+            text_color=CLR_ORANGE, anchor="center",
+        )
+        self._phase_status_label.pack(fill="x", pady=(0, 6))
+
+        # --- Recording indicator (REC ● with animated dots + timer) ---
+        self._rec_frame = ctk.CTkFrame(self._phase_display, fg_color="transparent")
+        # Not packed initially — shown/hidden dynamically
+
+        self._rec_dot_label = ctk.CTkLabel(
+            self._rec_frame, text="\u25cf", font=("Segoe UI", 48),
+            text_color=CLR_RED, width=50,
+        )
+        self._rec_dot_label.pack(side="left", padx=(0, 4))
+
+        self._rec_text_label = ctk.CTkLabel(
+            self._rec_frame, text="REC", font=("Segoe UI", 38, "bold"),
+            text_color=CLR_RED,
+        )
+        self._rec_text_label.pack(side="left")
+
+        self._rec_dots_label = ctk.CTkLabel(
+            self._rec_frame, text="", font=("Segoe UI", 38, "bold"),
+            text_color=CLR_RED, width=60, anchor="w",
+        )
+        self._rec_dots_label.pack(side="left")
+
+        self._rec_timer_label = ctk.CTkLabel(
+            self._rec_frame, text="00:00", font=("Consolas", 30),
+            text_color=CLR_RED,
+        )
+        self._rec_timer_label.pack(side="left", padx=(20, 0))
 
         self._phase_display_progress = ctk.CTkProgressBar(self._phase_display, height=14)
         self._phase_display_progress.pack(fill="x", padx=60, pady=(0, 8))
@@ -653,10 +720,36 @@ class IrisApp(ctk.CTk):
         ctrl = ctk.CTkFrame(self._vp_frame, fg_color="transparent")
         ctrl.pack(fill="x", padx=10, pady=(0, 5))
 
-        self._vp_recording_label = ctk.CTkLabel(
-            ctrl, text="", font=FONT_SMALL, text_color=CLR_RED
+        # Recording indicator for video player
+        self._vp_rec_frame = ctk.CTkFrame(ctrl, fg_color="transparent")
+        self._vp_rec_frame.pack(side="left", padx=10)
+
+        self._vp_rec_dot = ctk.CTkLabel(
+            self._vp_rec_frame, text="\u25cf", font=("Segoe UI", 28),
+            text_color=CLR_RED, width=24,
         )
-        self._vp_recording_label.pack(side="left", padx=10)
+        self._vp_rec_dot.pack(side="left", padx=(0, 2))
+
+        self._vp_recording_label = ctk.CTkLabel(
+            self._vp_rec_frame, text="", font=("Segoe UI", 20, "bold"),
+            text_color=CLR_RED,
+        )
+        self._vp_recording_label.pack(side="left")
+
+        self._vp_rec_dots = ctk.CTkLabel(
+            self._vp_rec_frame, text="", font=("Segoe UI", 20, "bold"),
+            text_color=CLR_RED, width=36, anchor="w",
+        )
+        self._vp_rec_dots.pack(side="left")
+
+        self._vp_rec_timer = ctk.CTkLabel(
+            self._vp_rec_frame, text="", font=("Consolas", 18),
+            text_color=CLR_RED,
+        )
+        self._vp_rec_timer.pack(side="left", padx=(10, 0))
+
+        # Hide all VP rec widgets initially
+        self._vp_rec_frame.pack_forget()
 
         self._vp_continue_btn = ctk.CTkButton(
             ctrl, text="Continue", width=100, height=32,
@@ -699,6 +792,63 @@ class IrisApp(ctk.CTk):
         color = CLR_GREEN if active else "gray50"
         indicator["dot"].configure(text_color=color)
         indicator["label"].configure(text_color=color)
+
+    # --- Recording Indicator Animation ---
+
+    def _start_rec_animation(self):
+        """Start the recording indicator animation (dots + timer) on both phase display and video player."""
+        self._rec_animating = True
+        self._rec_dot_step = 0
+        self._rec_start_time = time.time()
+        # Show phase display REC frame (before the progress bar)
+        self._rec_frame.pack(pady=(4, 8), before=self._phase_display_progress)
+        # Show VP REC frame
+        self._vp_rec_frame.pack(side="left", padx=10)
+        self._vp_recording_label.configure(text="REC")
+        self._vp_rec_timer.configure(text="00:00")
+        self._rec_timer_label.configure(text="00:00")
+        self._rec_animate_tick()
+
+    def _stop_rec_animation(self):
+        """Stop the recording animation and hide indicators."""
+        self._rec_animating = False
+        if self._rec_timer_id is not None:
+            self.after_cancel(self._rec_timer_id)
+            self._rec_timer_id = None
+        # Hide phase display REC
+        self._rec_frame.pack_forget()
+        # Hide VP REC
+        self._vp_rec_frame.pack_forget()
+        self._vp_recording_label.configure(text="")
+        self._vp_rec_dots.configure(text="")
+        self._vp_rec_timer.configure(text="")
+
+    def _rec_animate_tick(self):
+        """Animate the recording dots and update the timer."""
+        if not self._rec_animating:
+            return
+        # Cycle dots: ., .., ...
+        self._rec_dot_step = (self._rec_dot_step + 1) % 4
+        dots = "." * self._rec_dot_step if self._rec_dot_step > 0 else ""
+        self._rec_dots_label.configure(text=dots)
+        self._vp_rec_dots.configure(text=dots)
+
+        # Pulse the red dot visibility (blink every other tick)
+        if self._rec_dot_step % 2 == 0:
+            self._rec_dot_label.configure(text_color=CLR_RED)
+            self._vp_rec_dot.configure(text_color=CLR_RED)
+        else:
+            self._rec_dot_label.configure(text_color="#aa1111")
+            self._vp_rec_dot.configure(text_color="#aa1111")
+
+        # Update timer
+        elapsed = time.time() - self._rec_start_time
+        mins, secs = divmod(int(elapsed), 60)
+        timer_text = f"{mins:02d}:{secs:02d}"
+        self._rec_timer_label.configure(text=timer_text)
+        self._vp_rec_timer.configure(text=timer_text)
+
+        self._rec_timer_id = self.after(500, self._rec_animate_tick)
 
     # --- Devices Tab ---
 
@@ -966,7 +1116,7 @@ class IrisApp(ctk.CTk):
     def _populate_ui(self):
         exp = self.settings.get("experiment", {})
         self._set_entry(self._exp_w["name"], exp.get("name", ""))
-        self._set_entry(self._exp_w["output_dir"], exp.get("output_dir", "./output"))
+        self._set_entry(self._exp_w["output_dir"], exp.get("output_dir", "C:/Users/BarlabPRIME/desktop/Iris_Recorded_Taekwondo_Data"))
         self._exp_w["recording_format"].set(exp.get("recording_format", "mp4"))
 
         # Heart Rate
@@ -1324,7 +1474,8 @@ class IrisApp(ctk.CTk):
         self._vp_frame.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
         self._vp_title_label.configure(text=title)
         self._vp_message.configure(text=message)
-        # Show phase-specific instructional text, or generic prompt
+        # Clear any leftover video frame and show phase-specific instructional text
+        self._vp_canvas.configure(image=None)
         if title == "Narrating Review":
             self._vp_canvas.configure(
                 text="You will now narrate\nyour own performance",
@@ -1343,7 +1494,7 @@ class IrisApp(ctk.CTk):
             text=start_label, state="normal",
             fg_color=CLR_GREEN, hover_color=CLR_GREEN_H,
         )
-        self._vp_recording_label.configure(text="")
+        self._vp_rec_frame.pack_forget()  # Hide recording indicator initially
 
         # Update device indicators based on current settings
         s = self.settings
@@ -1485,6 +1636,10 @@ class IrisApp(ctk.CTk):
         """Restore the default pre-experiment layout with settings and actions."""
         self._experiment_layout_active = False
 
+        # Stop any recording animation
+        self._stop_rec_animation()
+        self._phase_status_label.configure(text="")
+
         # Clean up any choice buttons that may still be visible
         self._hide_done_choice_buttons()
         self._phase_display_stop.pack_forget()
@@ -1495,6 +1650,9 @@ class IrisApp(ctk.CTk):
         self._device_status_separator.pack_forget()
         self._device_status_header.pack_forget()
         self._device_status_frame.pack_forget()
+        self._checklist_separator.pack_forget()
+        self._checklist_header.pack_forget()
+        self._checklist_frame.pack_forget()
 
         self._exp_settings_frame.pack(fill="x")
         self._device_status_separator.pack(fill="x", padx=25, pady=(20, 0))
@@ -1593,6 +1751,13 @@ class IrisApp(ctk.CTk):
 
     def _show_done_choice_buttons(self):
         """Show the end/posthoc choice buttons on the phase display."""
+        # If checklist items exist and not all checked, show buttons disabled
+        if self._checklist_vars and not all(v.get() for v in self._checklist_vars):
+            self._done_end_btn.configure(state="disabled")
+            self._done_posthoc_btn.configure(state="disabled")
+        else:
+            self._done_end_btn.configure(state="normal")
+            self._done_posthoc_btn.configure(state="normal")
         self._done_end_btn.pack(fill="x", pady=(5, 5))
         self._done_posthoc_btn.pack(fill="x", pady=(5, 0))
 
@@ -1601,11 +1766,58 @@ class IrisApp(ctk.CTk):
         self._done_end_btn.pack_forget()
         self._done_posthoc_btn.pack_forget()
 
+    def _update_checklist(self, phase_id):
+        """Populate checklist for the given phase, or hide if none needed."""
+        # Clear old checkboxes
+        for w in self._checklist_frame.winfo_children():
+            w.destroy()
+        self._checklist_vars = []
+
+        items = _PHASE_CHECKLISTS.get(phase_id, [])
+        if not items:
+            self._checklist_separator.pack_forget()
+            self._checklist_header.pack_forget()
+            self._checklist_frame.pack_forget()
+            return
+
+        # Show checklist section
+        self._checklist_separator.pack(fill="x", padx=25, pady=(10, 0))
+        self._checklist_header.pack(anchor="w", padx=25, pady=(8, 4))
+        self._checklist_frame.pack(fill="x", padx=25, pady=(0, 10))
+
+        for text in items:
+            var = ctk.IntVar(value=0)
+            cb = ctk.CTkCheckBox(
+                self._checklist_frame,
+                text=text,
+                font=FONT_BODY,
+                variable=var,
+                command=self._on_checklist_toggle,
+            )
+            cb.pack(anchor="w", pady=2)
+            self._checklist_vars.append(var)
+
+    def _on_checklist_toggle(self):
+        """Re-evaluate whether all checklist items are checked and update gated buttons."""
+        all_checked = all(v.get() for v in self._checklist_vars)
+        state = "normal" if all_checked else "disabled"
+        self._continue_btn.configure(state=state)
+        self._phase_display_continue.configure(state=state)
+        self._done_end_btn.configure(state=state)
+        self._done_posthoc_btn.configure(state=state)
+
     def _show_continue_btn(self, label=None):
         """Show Continue buttons with optional label (both phase display and actions panel)."""
         if label:
             self._continue_btn.configure(text=label)
             self._phase_display_continue.configure(text=label)
+        # If checklist items exist and not all checked, show button disabled
+        if self._checklist_vars and not all(v.get() for v in self._checklist_vars):
+            self._continue_btn.configure(state="disabled")
+            self._phase_display_continue.configure(state="disabled")
+        else:
+            self._continue_btn.configure(state="normal")
+            self._phase_display_continue.configure(state="normal")
         self._continue_btn.pack(fill="x", pady=(10, 0))
         # Pack continue above stop in the phase display button frame
         self._phase_display_continue.pack(fill="x", pady=(0, 5), before=self._phase_display_stop)
@@ -2176,6 +2388,10 @@ class IrisApp(ctk.CTk):
             self._progress_bar.set(progress)
             self._phase_display_progress.set(progress)
             self._hide_continue_btn()
+            self._update_checklist(phase_id)
+
+            # Stop any running recording animation from previous phase
+            self._stop_rec_animation()
 
             # Update center phase display
             phases = self.settings.get("phases", [])
@@ -2184,6 +2400,20 @@ class IrisApp(ctk.CTk):
                 instructions = phases[idx].get("instructions", "")
             self._phase_display_name.configure(text=name)
             self._phase_display_desc.configure(text=instructions)
+
+            # Show prominent "IN PROGRESS" status
+            self._phase_status_label.configure(
+                text=f"\u25b6  PHASE IN PROGRESS  \u25b6",
+                text_color=CLR_ORANGE,
+            )
+
+            # Pre-switch to video player layout for review/scoring phases
+            # so the window is already resized before show_video_player fires
+            if phase_id in ("review", "scoring"):
+                self._exp_left.grid_forget()
+                self._phase_display.grid_forget()
+                self._vp_canvas.configure(image=None, text="", font=FONT_BODY)
+                self._vp_frame.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
 
         elif etype == "camera_selection":
             self._show_camera_selection(
@@ -2225,6 +2455,12 @@ class IrisApp(ctk.CTk):
         elif etype == "wait_for_continue":
             msg = event.get("message", "Press Continue to proceed.")
             self._progress_label.configure(text=msg)
+            # Update phase status to show waiting
+            self._phase_status_label.configure(
+                text="\u23f8  WAITING FOR CONTINUE  \u23f8",
+                text_color=CLR_GREEN,
+            )
+            self._phase_display_desc.configure(text=msg)
             # Build "Continue to <next phase>" label
             phases = self.settings.get("phases", [])
             idx = getattr(self, "_current_phase_index", 0)
@@ -2238,9 +2474,9 @@ class IrisApp(ctk.CTk):
 
         elif etype == "recording_status":
             if event.get("recording"):
-                self._vp_recording_label.configure(text="REC")
+                self._start_rec_animation()
             else:
-                self._vp_recording_label.configure(text="")
+                self._stop_rec_animation()
 
         elif etype == "status":
             msg = event.get("message", "")
@@ -2249,6 +2485,8 @@ class IrisApp(ctk.CTk):
         elif etype == "experiment_done_choice":
             self._hide_continue_btn()
             self._hide_video_player()
+            self._stop_rec_animation()
+            self._phase_status_label.configure(text="\u2705  COMPLETE", text_color=CLR_GREEN)
             # Show completion screen with two choices
             self._phase_display_name.configure(text="Experiment Complete")
             self._phase_display_desc.configure(
@@ -2263,6 +2501,8 @@ class IrisApp(ctk.CTk):
             self._phase_display_name.configure(text="Experiment Complete")
             self._phase_display_desc.configure(text="All phases finished successfully.")
             self._phase_display_progress.set(1.0)
+            self._phase_status_label.configure(text="\u2705  COMPLETE", text_color=CLR_GREEN)
+            self._stop_rec_animation()
             self._hide_continue_btn()
             self._hide_done_choice_buttons()
             self._hide_video_player()
@@ -2301,7 +2541,7 @@ class IrisApp(ctk.CTk):
         if not text:
             return
         # Try to find the session directory from settings
-        output_dir = self.settings.get("experiment", {}).get("output_dir", "./output")
+        output_dir = self.settings.get("experiment", {}).get("output_dir", "C:/Users/BarlabPRIME/desktop/Iris_Recorded_Taekwondo_Data")
         output_path = Path(output_dir)
         if not output_path.is_absolute():
             output_path = Path(os.path.dirname(os.path.abspath(__file__))) / output_path
