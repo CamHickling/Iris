@@ -582,6 +582,7 @@ class Experiment:
         player = VideoPlayer(overhead_path)
         if not player.open():
             print("WARNING: Cannot open overhead video for review. Skipping review.")
+            self._send_gui_event("hide_video_player")
             phase.complete()
             return
 
@@ -738,6 +739,7 @@ class Experiment:
         player = VideoPlayer(overhead_path)
         if not player.open():
             print("WARNING: Cannot open overhead video for scoring. Skipping.")
+            self._send_gui_event("hide_video_player")
             phase.complete()
             return
 
