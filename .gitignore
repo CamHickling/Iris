@@ -211,3 +211,11 @@ settings.json
 
 # Experiment output (recordings, videos, logs)
 output/
+
+# OS / editor / tool clutter
+.DS_Store
+.Rhistory
+.claude/settings.local.json
+
+# Quarto render output
+*_files/

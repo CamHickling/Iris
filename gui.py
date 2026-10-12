@@ -118,7 +118,7 @@ class IrisApp(ctk.CTk):
         ctk.set_default_color_theme("blue")
 
         # Window icon
-        logo_path = Path(os.path.dirname(os.path.abspath(__file__))) / "logo.png"
+        logo_path = Path(os.path.dirname(os.path.abspath(__file__))) / "assets" / "logo.png"
         if logo_path.exists() and PILImage:
             from PIL import ImageTk
             icon_img = PILImage.open(logo_path)

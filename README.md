@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="Iris logo" width="200">
+  <img src="assets/logo.png" alt="Iris logo" width="200">
 </p>
 
 <h1 align="center">Iris</h1>
@@ -92,7 +92,7 @@ Iris/
 ├── Iris.pyw                      # Windows double-click launcher
 ├── settings.json                 # Experiment configuration
 ├── requirements.txt              # Python dependencies
-├── logo.png                      # Application icon
+├── launch.bat                    # Lab-PC launcher (conda env)
 ├── src/
 │   ├── experiment.py             # Experiment state machine and phase handlers
 │   ├── camera.py                 # USB camera interface (OpenCV)
@@ -108,9 +108,18 @@ Iris/
 │   ├── calibrate.py              # Pre-flight device connectivity check
 │   ├── phase.py                  # Phase state machine
 │   └── utils.py                  # Timestamps, directory helpers
-├── SYNCHRONIZATION.md            # Cross-device sync reference
-├── EXPERIMENT_FLOW.md            # Detailed experiment lifecycle docs
-└── SETUP_GUIDE.md                # Hardware setup and troubleshooting
+├── tests/                        # pytest suite
+├── scripts/
+│   └── probe_camera.py           # Probe webcam resolutions / FPS
+├── assets/
+│   ├── logo.png                  # Application icon
+│   └── logo.ico
+└── docs/
+    ├── SETUP_GUIDE.md            # Hardware setup and troubleshooting
+    ├── EXPERIMENT_FLOW.md        # Detailed experiment lifecycle docs
+    ├── SYNCHRONIZATION.md        # Cross-device sync reference
+    ├── experiment_specification.txt
+    └── checkerboard.pdf          # Printable calibration target
 ```
 
 ## Setup
@@ -121,7 +130,7 @@ pip install -r requirements.txt
 
 **Requirements:** Python 3.8+, Windows 11 (primary), ffmpeg on PATH (for compositing).
 
-See [SETUP_GUIDE.md](SETUP_GUIDE.md) for detailed hardware setup including GoPro WiFi routing, Polar H10 BLE configuration, and USB camera indexing.
+See [SETUP_GUIDE.md](docs/SETUP_GUIDE.md) for detailed hardware setup including GoPro WiFi routing, Polar H10 BLE configuration, and USB camera indexing.
 
 ## Usage
 
@@ -151,12 +160,12 @@ Edit `settings.json` to configure:
 
 Every session produces a `sync_manifest.json` with microsecond-precision Unix timestamps for every recording start/stop, phase transition, and device event. This enables precise post-hoc alignment of all data streams.
 
-See [SYNCHRONIZATION.md](SYNCHRONIZATION.md) for the complete cross-device sync reference, including alignment recipes and code examples for HR-to-video, face-to-audio, and GoPro sync strategies.
+See [SYNCHRONIZATION.md](docs/SYNCHRONIZATION.md) for the complete cross-device sync reference, including alignment recipes and code examples for HR-to-video, face-to-audio, and GoPro sync strategies.
 
 ## Documentation
 
 | Document | Contents |
 |----------|----------|
-| [SETUP_GUIDE.md](SETUP_GUIDE.md) | Hardware setup, driver installation, GoPro WiFi routing, troubleshooting |
-| [EXPERIMENT_FLOW.md](EXPERIMENT_FLOW.md) | Detailed experiment lifecycle and phase handler documentation |
-| [SYNCHRONIZATION.md](SYNCHRONIZATION.md) | Cross-device timing, sync_manifest format, alignment code examples |
+| [SETUP_GUIDE.md](docs/SETUP_GUIDE.md) | Hardware setup, driver installation, GoPro WiFi routing, troubleshooting |
+| [EXPERIMENT_FLOW.md](docs/EXPERIMENT_FLOW.md) | Detailed experiment lifecycle and phase handler documentation |
+| [SYNCHRONIZATION.md](docs/SYNCHRONIZATION.md) | Cross-device timing, sync_manifest format, alignment code examples |
