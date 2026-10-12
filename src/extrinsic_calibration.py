@@ -1,6 +1,6 @@
 """Multi-camera extrinsic calibration using shared checkerboard views.
 
-Reuses checkerboard parameters from lens_correct.py (10x7, 25mm squares).
+Reuses checkerboard parameters from intrinsic_calibration.py (10x7, 25mm squares).
 """
 
 import json
@@ -10,7 +10,7 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from .lens_correct import (
+from .intrinsic_calibration import (
     BOARD_INNER_COLS,
     BOARD_INNER_ROWS,
     SQUARE_SIZE_MM,
@@ -22,7 +22,7 @@ def calibrate_intrinsic(video_path: str) -> Optional[tuple]:
     """Run intrinsic calibration on a single video.
 
     Returns (K, D, frame_size) or None on failure.
-    Delegates to lens_correct.calibrate_from_video().
+    Delegates to intrinsic_calibration.calibrate_from_video().
     """
     print(f"\n--- Intrinsic calibration: {video_path} ---")
     return calibrate_from_video(video_path)

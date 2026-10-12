@@ -1,7 +1,9 @@
 """Mock hardware dependencies that aren't installed in test environments."""
 
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Mock bleak before any src imports
 bleak_mock = MagicMock()
@@ -28,3 +30,14 @@ sys.modules["ffmpeg"] = ffmpeg_mock
 pil_mock = MagicMock()
 sys.modules["PIL"] = pil_mock
 sys.modules["PIL.Image"] = pil_mock.Image
+
+
+@pytest.fixture(autouse=True)
+def _no_gopro_network_setup():
+    """Stop GoProCam.connect() from touching real network adapters.
+
+    The real helper waits for DHCP and then runs an elevated netsh command
+    to set a static IP, which is slow and can raise a UAC prompt.
+    """
+    with patch("src.gopro.ensure_interface_ip", return_value=None):
+        yield

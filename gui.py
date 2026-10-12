@@ -74,7 +74,7 @@ _PHASE_CHECKLISTS = {
         "Intrinsic calibration checkerboarding complete",
         "Extrinsic calibration checkerboarding complete",
         "Participant T-pose in the middle of the mat",
-        "Angela clap to align the cameras",
+        "Clap on camera to align the recordings",
     ],
     "performance": [
         "Participant has completed all movements",
@@ -2033,7 +2033,7 @@ class IrisApp(ctk.CTk):
             sys.stdout = OutputRedirector(self.output_queue, "stdout")
             sys.stderr = OutputRedirector(self.output_queue, "stderr")
             try:
-                from src.len_correction import process_directory, undistort_video
+                from src.gopro_undistort import process_directory, undistort_video
 
                 if target.is_dir():
                     process_directory(str(target))

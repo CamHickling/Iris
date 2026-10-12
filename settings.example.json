@@ -2,6 +2,7 @@
   "experiment": {
     "name": "Taekwondo Experiment",
     "output_dir": "./output",
+    "backup_dir": null,
     "recording_format": "mp4"
   },
   "cameras": [

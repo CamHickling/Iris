@@ -34,7 +34,7 @@ def main():
     args = parser.parse_args()
 
     if args.undistort:
-        from src.len_correction import undistort_video, process_directory
+        from src.gopro_undistort import undistort_video, process_directory
 
         target = Path(args.undistort)
         if target.is_dir():

@@ -198,6 +198,21 @@ class TestCameraConfig:
         assert cfg.role is None
 
 
+def _mock_capture(mock_cv2, width=1920, height=1080, fps=30.0):
+    """Build a VideoCapture mock whose get() returns real numbers per property."""
+    mock_cap = MagicMock()
+    mock_cap.isOpened.return_value = True
+    props = {
+        mock_cv2.CAP_PROP_FRAME_WIDTH: width,
+        mock_cv2.CAP_PROP_FRAME_HEIGHT: height,
+        mock_cv2.CAP_PROP_FPS: fps,
+        mock_cv2.CAP_PROP_ZOOM: 0.0,
+    }
+    mock_cap.get.side_effect = lambda prop: props.get(prop, 0.0)
+    mock_cv2.VideoCapture.return_value = mock_cap
+    return mock_cap
+
+
 class TestCamera:
     def _make_camera(self):
         from src.camera import Camera, CameraConfig
@@ -209,9 +224,7 @@ class TestCamera:
 
     @patch("src.camera.cv2")
     def test_camera_open_close(self, mock_cv2):
-        mock_cap = MagicMock()
-        mock_cap.isOpened.return_value = True
-        mock_cv2.VideoCapture.return_value = mock_cap
+        mock_cap = _mock_capture(mock_cv2)
 
         camera = self._make_camera()
         assert camera.open() is True
@@ -235,11 +248,9 @@ class TestCamera:
 
     @patch("src.camera.cv2")
     def test_camera_read_frame_success(self, mock_cv2):
-        mock_cap = MagicMock()
-        mock_cap.isOpened.return_value = True
+        mock_cap = _mock_capture(mock_cv2)
         fake_frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
         mock_cap.read.return_value = (True, fake_frame)
-        mock_cv2.VideoCapture.return_value = mock_cap
 
         camera = self._make_camera()
         camera.open()
@@ -249,10 +260,8 @@ class TestCamera:
 
     @patch("src.camera.cv2")
     def test_camera_read_frame_failure(self, mock_cv2):
-        mock_cap = MagicMock()
-        mock_cap.isOpened.return_value = True
+        mock_cap = _mock_capture(mock_cv2)
         mock_cap.read.return_value = (False, None)
-        mock_cv2.VideoCapture.return_value = mock_cap
 
         camera = self._make_camera()
         camera.open()
@@ -267,9 +276,7 @@ class TestCamera:
 class TestCameraManager:
     @patch("src.camera.cv2")
     def test_camera_manager_open_all(self, mock_cv2):
-        mock_cap = MagicMock()
-        mock_cap.isOpened.return_value = True
-        mock_cv2.VideoCapture.return_value = mock_cap
+        mock_cap = _mock_capture(mock_cv2)
 
         from src.camera import CameraManager
         configs = [
@@ -284,11 +291,9 @@ class TestCameraManager:
 
     @patch("src.camera.cv2")
     def test_camera_manager_capture_all(self, mock_cv2):
-        mock_cap = MagicMock()
-        mock_cap.isOpened.return_value = True
+        mock_cap = _mock_capture(mock_cv2, width=640, height=480)
         fake_frame = np.zeros((480, 640, 3), dtype=np.uint8)
         mock_cap.read.return_value = (True, fake_frame)
-        mock_cv2.VideoCapture.return_value = mock_cap
 
         from src.camera import CameraManager
         configs = [
@@ -398,9 +403,10 @@ class TestGoProManager:
         assert result is True
         assert all(c.is_connected for c in mgr.cameras.values())
 
+    @patch("src.gopro.socket")
     @patch("src.gopro.GoProCamera")
     @patch("src.gopro.constants")
-    def test_keep_alive_all_threaded(self, mock_constants, mock_gpc):
+    def test_keep_alive_all_threaded(self, mock_constants, mock_gpc, mock_socket):
         mock_camera = MagicMock()
         mock_camera.infoCamera.return_value = "HERO7 Silver"
         mock_gpc.GoPro.return_value = mock_camera
@@ -413,7 +419,12 @@ class TestGoProManager:
         mgr = GoProManager(configs)
         mgr.connect_all()
         mgr.keep_alive_all()
-        mock_camera.KeepAlive.assert_called()
+        # Keep-alive goes out on our own UDP socket, not goprocam's KeepAlive()
+        sock = mock_socket.socket.return_value
+        sock.sendto.assert_called_once()
+        payload, (ip, port) = sock.sendto.call_args[0]
+        assert payload.startswith(b"_GPHD_")
+        assert (ip, port) == ("10.5.5.9", 8554)
 
 
 # ============================================================
@@ -578,11 +589,11 @@ class TestGetSummary:
 
 
 # ============================================================
-# Module: src/len_correction.py
+# Module: src/gopro_undistort.py
 # ============================================================
 
 class TestUndistortVideo:
-    @patch("src.len_correction.cv2")
+    @patch("src.gopro_undistort.cv2")
     def test_undistort_video_correct_property_access(self, mock_cv2):
         """Verify the bug fix: cap.get() is called directly with cv2 constants,
         NOT wrapped in cv2.get()."""
@@ -599,7 +610,7 @@ class TestUndistortVideo:
         mock_writer = MagicMock()
         mock_cv2.VideoWriter.return_value = mock_writer
 
-        from src.len_correction import undistort_video
+        from src.gopro_undistort import undistort_video
         undistort_video("in.mp4", "out.mp4")
 
         # Verify cap.get was called with the constants directly (not via cv2.get)
@@ -609,7 +620,7 @@ class TestUndistortVideo:
         # Verify cv2.get was NOT called (the bug)
         assert not hasattr(mock_cv2, 'get') or not mock_cv2.get.called
 
-    @patch("src.len_correction.cv2")
+    @patch("src.gopro_undistort.cv2")
     def test_undistort_video_headless(self, mock_cv2):
         """Verify no imshow/waitKey/destroyAllWindows calls in the processing path."""
         mock_cap = MagicMock()
@@ -628,15 +639,15 @@ class TestUndistortVideo:
         mock_cv2.VideoWriter_fourcc.return_value = 0x7634706D
         mock_cv2.VideoWriter.return_value = MagicMock()
 
-        from src.len_correction import undistort_video
+        from src.gopro_undistort import undistort_video
         undistort_video("in.mp4", "out.mp4")
 
         mock_cv2.imshow.assert_not_called()
         mock_cv2.waitKey.assert_not_called()
         mock_cv2.destroyAllWindows.assert_not_called()
 
-    @patch("src.len_correction.cv2")
-    @patch("src.len_correction.os")
+    @patch("src.gopro_undistort.cv2")
+    @patch("src.gopro_undistort.os")
     def test_process_directory(self, mock_os, mock_cv2):
         """Verify process_directory discovers .mp4 files and processes each."""
         mock_os.listdir.return_value = ["clip1.mp4", "clip2.MP4", "photo.jpg"]
@@ -651,7 +662,7 @@ class TestUndistortVideo:
         mock_cv2.VideoWriter_fourcc.return_value = 0
         mock_cv2.VideoWriter.return_value = MagicMock()
 
-        from src.len_correction import process_directory
+        from src.gopro_undistort import process_directory
         process_directory("/videos", "/output")
 
         mock_os.makedirs.assert_called_once_with("/output", exist_ok=True)

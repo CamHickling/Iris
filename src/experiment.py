@@ -26,6 +26,8 @@ from .utils import timestamp_string
 from .video_player import PlayerState, VideoPlayer
 from .video_recorder import PausableVideoRecorder, VideoRecorder
 
+DEFAULT_BACKUP_DIR = "F:/Iris_Recorded_Taekwondo_Data"
+
 
 class Experiment:
     def __init__(self, settings: dict, gui_event_queue: Optional[queue.Queue] = None,
@@ -34,6 +36,9 @@ class Experiment:
         self.settings = settings
         self.name = settings["experiment"]["name"]
         self.output_dir = Path(settings["experiment"]["output_dir"])
+        # Session copy made at teardown; null in settings disables it
+        backup_dir = settings["experiment"].get("backup_dir", DEFAULT_BACKUP_DIR)
+        self.backup_dir: Optional[Path] = Path(backup_dir) if backup_dir else None
         self.gopro_mode = gopro_mode  # "auto" or "manual"
 
         self.camera_manager = CameraManager(settings["cameras"])
@@ -175,21 +180,23 @@ class Experiment:
         self._log_sync("session_created", session_dir=str(self._session_dir))
         return True
 
-    def _backup_to_f_drive(self):
-        """Copy the session folder to F:/Iris_Recorded_Taekwondo_Data/ as a backup."""
+    def _backup_session(self):
+        """Copy the session folder into the configured backup directory."""
+        if self.backup_dir is None:
+            return
         if self._session_dir is None or not self._session_dir.exists():
             print("No session directory to back up.")
             return
 
-        backup_root = Path("F:/Iris_Recorded_Taekwondo_Data")
+        backup_root = self.backup_dir
         try:
-            # Check if F: drive is available
-            if not Path("F:/").exists():
-                print("WARNING: F: drive not found. Skipping backup.")
+            # Check the backup drive is attached
+            if backup_root.anchor and not Path(backup_root.anchor).exists():
+                print(f"WARNING: Backup drive {backup_root.anchor} not found. Skipping backup.")
                 return
 
             backup_dest = backup_root / self._session_dir.name
-            print(f"\n--- Backing Up to F: Drive ---")
+            print(f"\n--- Backing Up Session ---")
             print(f"Source:      {self._session_dir}")
             print(f"Destination: {backup_dest}")
 
@@ -203,7 +210,7 @@ class Experiment:
             print(f"Backup complete: {backup_dest}")
 
         except Exception as e:
-            print(f"WARNING: Backup to F: drive failed: {e}")
+            print(f"WARNING: Backup to {backup_root} failed: {e}")
             print("Primary data is still safe in the output directory.")
 
     def _save_sync_manifest(self):
@@ -272,8 +279,8 @@ class Experiment:
         self._log_sync("teardown_complete")
         self._save_sync_manifest()
 
-        # Backup session data to F: drive
-        self._backup_to_f_drive()
+        # Copy session data to the backup drive
+        self._backup_session()
 
         print("Teardown complete")
 
@@ -465,10 +472,10 @@ class Experiment:
             if action.get("type") == "continue":
                 break
 
-        # Ask Angela to clap to align the cameras
-        print("\nAngela, please perform a single clap to align the cameras.")
+        # Ask for a clap to align the cameras
+        print("\nPlease perform a single clap to align the cameras.")
         self._send_gui_event("wait_for_continue",
-                             message="Angela, please clap to align the cameras. Press Continue when done.")
+                             message="Please clap once on camera to align the recordings. Press Continue when done.")
         self._log_sync("clap_sync_requested")
 
         # Wait for clap to finish
