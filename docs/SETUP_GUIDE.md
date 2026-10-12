@@ -18,7 +18,7 @@ This guide walks through connecting all hardware devices and verifying they work
 
 ### Python Environment
 
-Ensure Python 3.8+ is installed. Then install dependencies:
+Ensure Python 3.9+ is installed. Then install dependencies:
 
 ```bash
 pip install -r requirements.txt

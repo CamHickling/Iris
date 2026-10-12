@@ -10,7 +10,8 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
-  <img alt="Python 3.8+" src="https://img.shields.io/badge/python-3.8%2B-blue.svg">
+  <a href="https://github.com/CamHickling/Iris/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/CamHickling/Iris/actions/workflows/tests.yml/badge.svg"></a>
+  <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-blue.svg">
   <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows%2011-lightgrey.svg">
 </p>
 
@@ -41,7 +42,7 @@ It was built for Taekwondo performance research, where a participant performs, w
 
 ## Quick start
 
-**Prerequisites:** Windows 11, Python 3.8+, and [ffmpeg](https://ffmpeg.org/download.html) on your `PATH`.
+**Prerequisites:** Windows 11, Python 3.9+, and [ffmpeg](https://ffmpeg.org/download.html) on your `PATH`.
 
 ```bash
 git clone https://github.com/CamHickling/Iris.git
@@ -86,8 +87,8 @@ A session runs through these phases in order. Each phase `id` in `settings.json`
 |---|---|---|---|
 | 1 | Setup (`setup`) | Creates the session directory | — |
 | 2 | Heart Rate Start (`heart_rate_start`) | Connects the Polar H10. HR records for the whole session. | — |
-| 3 | Warmup & Calibration (`warmup_calibration`) | Opens cameras, assigns roles, starts overhead + GoPro recording, checkerboard calibration, T-pose and clap sync | ✅ |
-| 4 | Performance (`performance`) | Overhead + GoPros record the performance | ✅ |
+| 3 | Warmup & Calibration (`warmup_calibration`) | Opens cameras, assigns overhead/face roles, tests the mic, records GoPros during checkerboard calibration, T-pose, and clap sync | ✅ |
+| 4 | Performance (`performance`) | Overhead camera + GoPros record the performance | ✅ |
 | 5 | Narrating Review (`review`) | Participant watches the overhead video and narrates, with pause/resume. Face cam + mic record. | — |
 | 6 | Self-Scoring (`scoring`) | Participant watches again (no pausing) and scores aloud. Face cam + mic record. | — |
 | 7 | Finish (`finish`) | Stops HR, runs compositing and HR overlays, backs up the session | ✅ |
@@ -129,7 +130,7 @@ Settings live in `settings.json`, which is git-ignored so each lab machine can k
 
 | Section | Controls |
 |---|---|
-| `experiment` | Project name, output directory, recording format |
+| `experiment` | Project name, output directory, recording format, `backup_dir` (set to `null` to turn off backup) |
 | `cameras` | Device index, resolution, FPS, and role (`overhead` / `face`) for each webcam |
 | `gopros` | Model, WiFi interface, IP, enabled flag |
 | `heart_rate` | Polar H10 on/off, BLE address, ECG on/off |
@@ -159,9 +160,9 @@ Iris/
 │   ├── heart_rate.py       # Polar H10 over BLE
 │   ├── compositing.py      # ffmpeg compositing and HR overlays
 │   ├── calibrate.py        # Pre-flight device check
-│   ├── lens_correct.py     # Checkerboard intrinsic calibration
-│   ├── len_correction.py   # GoPro barrel-distortion removal
+│   ├── intrinsic_calibration.py  # Checkerboard lens calibration
 │   ├── extrinsic_calibration.py  # Multi-camera stereo calibration
+│   ├── gopro_undistort.py  # GoPro barrel-distortion removal
 │   └── utils.py
 ├── tests/                  # pytest suite (hardware is mocked)
 ├── scripts/
