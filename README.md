@@ -1,81 +1,117 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Iris logo" width="200">
+  <img src="assets/logo.png" alt="Iris logo" width="180">
 </p>
 
 <h1 align="center">Iris</h1>
 
 <p align="center">
-Multi-camera, multi-sensor experiment capture platform for movement science research.<br>
-Full-screen desktop GUI with synchronized video, audio, heart rate, and GoPro recording.
+  <strong>Synchronized multi-camera, audio, and heart-rate capture for movement science experiments.</strong>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+  <img alt="Python 3.8+" src="https://img.shields.io/badge/python-3.8%2B-blue.svg">
+  <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows%2011-lightgrey.svg">
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick start</a> •
+  <a href="#how-it-works">How it works</a> •
+  <a href="#configuration">Configuration</a> •
+  <a href="#documentation">Docs</a> •
+  <a href="#contributing">Contributing</a>
 </p>
 
 ---
 
-## Overview
+Iris is a full-screen desktop app that runs structured, multi-phase lab sessions. It records USB webcams, GoPros, a Polar H10 heart-rate monitor, and a microphone from one place, and logs a shared timeline so you can line the data up afterwards.
 
-Iris is a desktop application built for running structured, multi-phase Taekwondo (and general movement science) experiments. It orchestrates synchronized capture across USB cameras, GoPro action cameras, a Polar H10 heart rate monitor, and a USB microphone — all controlled through a single full-screen GUI.
+It was built for Taekwondo performance research, where a participant performs, watches themselves back while narrating, and then scores their own performance. The phase system is configurable, so you can adapt it to other movement-science protocols.
 
-The experimenter is guided through a 7-phase workflow with checklist-gated phase advancement, real-time device status monitoring, integrated video playback for participant self-review and self-scoring, and automated post-processing with heart rate overlays.
+## Features
 
-Every session produces a `sync_manifest.json` that records wall-clock timestamps for every key event, enabling precise cross-device synchronization in post-processing.
+- **One GUI for every device.** Overhead and face webcams, up to two GoPros over WiFi, a Polar H10 (HR, RR intervals, optional 130 Hz ECG), and a USB microphone.
+- **Guided phase workflow.** The experimenter moves through phases, and checklists must be ticked before they can advance, so steps don't get skipped.
+- **Built-in playback for participants.** Plays the overhead recording back while the face camera and mic record the participant's reaction. Pause/resume can be turned on per phase.
+- **Synchronization manifest.** Every session writes a `sync_manifest.json` with microsecond Unix timestamps for each recording start/stop, phase change, and device event.
+- **Automatic post-processing.** Uses ffmpeg to build a review video with the participant's commentary and face videos with a heart-rate overlay.
+- **Calibration tools.** Intrinsic and extrinsic (stereo) checkerboard calibration, plus barrel-distortion correction for GoPro footage.
+- **Live device status.** Pass/fail indicators for every connected device, and a pre-flight check (`--calibrate`).
+- **Automatic backup.** When the experiment finishes, the session is copied to a backup drive.
 
-## Key Features
+## Quick start
 
-- **Full-screen GUI** — dark-mode CustomTkinter interface with tabbed configuration (Experiment, Devices, Phases, Calibration)
-- **7-phase experiment workflow** — setup, HR connection, warmup/calibration, performance, narrating review, self-scoring, finish
-- **Checklist-gated advancement** — configurable per-phase requirements that must be checked before the experimenter can proceed
-- **Synchronized multi-device capture** — overhead camera, face camera, microphone, Polar H10 HR/ECG, and dual GoPros
-- **Integrated video player** — plays back overhead footage for participant narrating review (with pause/resume) and self-scoring
-- **Real-time device status panel** — live pass/fail indicators for every connected device
-- **Heart rate monitoring** — continuous BPM + RR intervals + optional 130 Hz ECG via Bluetooth LE, phase-labeled
-- **Automated post-processing** — composited review video with audio commentary, HR-overlay face videos via ffmpeg
-- **Synchronization manifest** — `sync_manifest.json` with microsecond-precision Unix timestamps for every recording start/stop, phase transition, and device event
-- **Multi-camera calibration** — intrinsic and extrinsic checkerboard calibration pipeline with stereo calibration
-- **GoPro lens correction** — barrel distortion removal for Hero 7 Silver / Hero 5 Session footage
-- **Automatic backup** — copies session data to a backup drive on experiment completion
+**Prerequisites:** Windows 11, Python 3.8+, and [ffmpeg](https://ffmpeg.org/download.html) on your `PATH`.
 
-## Hardware
+```bash
+git clone https://github.com/CamHickling/Iris.git
+cd Iris
+pip install -r requirements.txt
+copy settings.example.json settings.json
+python gui.py
+```
 
-| Device | Quantity | Connection | Purpose |
-|--------|----------|------------|---------|
-| Logitech USB webcam (1080p/30fps) | 2 | USB | Overhead + face camera |
-| GoPro Hero 7 Silver / Hero 5 Session | 2 | WiFi (via USB WiFi adapters) | Wide-angle multi-view capture |
-| Polar H10 chest strap | 1 | Bluetooth LE | Heart rate + RR intervals + ECG |
-| USB microphone (Tonor or similar) | 1 | USB | Voice commentary and scoring audio |
-| Windows 11 PC | 1 | — | Runs Iris |
+You can also double-click `Iris.pyw` to launch without a console window, or use `launch.bat` to activate a conda environment first.
 
-## Experiment Phases
+> **No hardware yet?** Leave GoPros, heart rate, and the microphone disabled in `settings.json`. Iris runs with just a webcam.
 
-| # | Phase | What Happens | Checklist-Gated |
-|---|-------|-------------|-----------------|
-| 1 | **Setup** | Create session directories, display project name | — |
-| 2 | **Heart Rate Start** | Connect Polar H10, begin HR recording | — |
-| 3 | **Warmup & Calibration** | Open cameras, assign roles, start overhead recording, start GoPros, checkerboard calibration | 7 items |
-| 4 | **Performance** | Record overhead + GoPros while participant performs | 2 items |
-| 5 | **Narrating Review** | Play back overhead video; participant narrates with pause/resume; face cam + mic record | — |
-| 6 | **Self-Scoring** | Play back overhead video (no pause); participant scores; face cam + mic record | — |
-| 7 | **Finish** | Post-processing (compositing, HR overlays), experimenter confirms HR stop | 1 item |
+For full hardware setup (GoPro WiFi routing, Polar H10 pairing, camera indexing), see the **[Setup Guide](docs/SETUP_GUIDE.md)**.
 
-## Session Output
+## Command-line usage
 
-Each experiment session produces a timestamped directory:
+```bash
+python gui.py                          # Launch the GUI (recommended)
+python main.py                         # Run an experiment headless with settings.json
+python main.py --config custom.json    # Use a different config file
+python main.py --calibrate             # Pre-flight device connectivity check
+python main.py --undistort ./videos/   # Remove GoPro lens distortion from a file or folder
+```
+
+## Supported hardware
+
+| Device | Qty | Connection | Used for |
+|---|---|---|---|
+| USB webcam, 1080p30 (tested: Logitech) | 2 | USB | Overhead + face camera |
+| GoPro Hero 7 Silver / Hero 5 Session | 0–2 | WiFi (one USB WiFi adapter per camera) | Wide-angle multi-view capture |
+| Polar H10 chest strap | 0–1 | Bluetooth LE | Heart rate, RR intervals, ECG |
+| USB microphone (tested: Tonor) | 0–1 | USB | Narration and scoring audio |
+
+Other OpenCV-compatible webcams and audio devices should work. Please [open an issue](https://github.com/CamHickling/Iris/issues) to report what you've tested.
+
+## How it works
+
+A session runs through these phases in order. Each phase `id` in `settings.json` maps to a handler in `src/experiment.py`.
+
+| # | Phase (`id`) | What happens | Gated by checklist |
+|---|---|---|---|
+| 1 | Setup (`setup`) | Creates the session directory | — |
+| 2 | Heart Rate Start (`heart_rate_start`) | Connects the Polar H10. HR records for the whole session. | — |
+| 3 | Warmup & Calibration (`warmup_calibration`) | Opens cameras, assigns roles, starts overhead + GoPro recording, checkerboard calibration, T-pose and clap sync | ✅ |
+| 4 | Performance (`performance`) | Overhead + GoPros record the performance | ✅ |
+| 5 | Narrating Review (`review`) | Participant watches the overhead video and narrates, with pause/resume. Face cam + mic record. | — |
+| 6 | Self-Scoring (`scoring`) | Participant watches again (no pausing) and scores aloud. Face cam + mic record. | — |
+| 7 | Finish (`finish`) | Stops HR, runs compositing and HR overlays, backs up the session | ✅ |
+
+See [docs/EXPERIMENT_FLOW.md](docs/EXPERIMENT_FLOW.md) for the full lifecycle.
+
+### Session output
 
 ```
 Session_Name_20260222_143012/
-├── sync_manifest.json            # Master synchronization file
+├── sync_manifest.json            # Master timeline for all devices
 ├── performance/
-│   └── overhead_camera.mp4       # Overhead USB camera recording
+│   └── overhead_camera.mp4
 ├── review/
-│   ├── face_cam.mp4              # Face camera (pausable)
-│   ├── audio_commentary.wav      # Microphone audio
-│   └── review_timestamps.json    # Pause/resume wall-clock markers
+│   ├── face_cam.mp4
+│   ├── audio_commentary.wav
+│   └── review_timestamps.json    # Pause/resume markers
 ├── scoring/
-│   ├── face_cam.mp4              # Face camera (continuous)
-│   └── audio_scoring.wav         # Microphone audio
+│   ├── face_cam.mp4
+│   └── audio_scoring.wav
 ├── heart_rate/
-│   ├── hr_full_session.csv       # HR + RR intervals (phase-labeled)
-│   └── ecg_full_session.csv      # Raw ECG at 130 Hz (if enabled)
-├── gopro_footage/                # Manually copied GoPro files
+│   ├── hr_full_session.csv       # BPM + RR intervals, labeled by phase
+│   └── ecg_full_session.csv      # 130 Hz ECG (if enabled)
+├── gopro_footage/                # GoPro files copied in after the session
 ├── composited/
 │   ├── overhead_with_commentary.mp4
 │   ├── review_face_with_hr.mp4
@@ -83,89 +119,84 @@ Session_Name_20260222_143012/
 └── calibration/
 ```
 
-## Project Structure
+### Synchronization
 
-```
-Iris/
-├── gui.py                        # Full-screen desktop GUI (CustomTkinter)
-├── main.py                       # CLI entry point
-├── Iris.pyw                      # Windows double-click launcher
-├── settings.json                 # Experiment configuration
-├── requirements.txt              # Python dependencies
-├── launch.bat                    # Lab-PC launcher (conda env)
-├── src/
-│   ├── experiment.py             # Experiment state machine and phase handlers
-│   ├── camera.py                 # USB camera interface (OpenCV)
-│   ├── video_recorder.py         # Video recording with pausable support
-│   ├── video_player.py           # Threaded video playback engine
-│   ├── audio.py                  # Audio recording (soundfile/sounddevice)
-│   ├── gopro.py                  # GoPro WiFi control (goprocam)
-│   ├── heart_rate.py             # Polar H10 BLE HR + ECG (bleak)
-│   ├── compositing.py            # ffmpeg-based video compositing and HR overlay
-│   ├── extrinsic_calibration.py  # Multi-camera stereo calibration pipeline
-│   ├── lens_correct.py           # Checkerboard-based lens calibration
-│   ├── len_correction.py         # GoPro barrel distortion correction
-│   ├── calibrate.py              # Pre-flight device connectivity check
-│   ├── phase.py                  # Phase state machine
-│   └── utils.py                  # Timestamps, directory helpers
-├── tests/                        # pytest suite
-├── scripts/
-│   └── probe_camera.py           # Probe webcam resolutions / FPS
-├── assets/
-│   ├── logo.png                  # Application icon
-│   └── logo.ico
-└── docs/
-    ├── SETUP_GUIDE.md            # Hardware setup and troubleshooting
-    ├── EXPERIMENT_FLOW.md        # Detailed experiment lifecycle docs
-    ├── SYNCHRONIZATION.md        # Cross-device sync reference
-    ├── experiment_specification.txt
-    └── checkerboard.pdf          # Printable calibration target
-```
-
-## Setup
-
-```bash
-pip install -r requirements.txt
-```
-
-**Requirements:** Python 3.8+, Windows 11 (primary), ffmpeg on PATH (for compositing).
-
-See [SETUP_GUIDE.md](docs/SETUP_GUIDE.md) for detailed hardware setup including GoPro WiFi routing, Polar H10 BLE configuration, and USB camera indexing.
-
-## Usage
-
-```bash
-python gui.py                          # Launch the GUI (recommended)
-python main.py                         # CLI mode with default settings
-python main.py --config custom.json    # CLI mode with custom config
-python main.py --calibrate             # Pre-flight device check
-python main.py --undistort ./videos/   # GoPro lens correction
-```
-
-Or double-click `Iris.pyw` on Windows.
+All streams share one wall clock. `sync_manifest.json` records when each device actually started and stopped, so you can align HR to video, face cam to audio, and GoPros to the overhead camera after the session. [docs/SYNCHRONIZATION.md](docs/SYNCHRONIZATION.md) has the manifest format and alignment code examples.
 
 ## Configuration
 
-Edit `settings.json` to configure:
+Settings live in `settings.json`, which is git-ignored so each lab machine can keep its own copy. Start from [`settings.example.json`](settings.example.json). Most fields can also be edited in the GUI's **Devices**, **Phases**, and **Calibration** tabs.
 
-- **experiment** — name, output directory, recording format
-- **cameras** — USB device indices, resolutions, frame rates, roles (overhead/face)
-- **gopros** — model, WiFi interface, IP address, enabled toggle
-- **heart_rate** — Polar H10 toggle, BLE address, ECG toggle
-- **microphone** — device name, sample rate, channels
-- **calibration** — checkerboard dimensions, square size, intrinsic/extrinsic toggles
-- **phases** — ordered list of experiment phases with IDs, names, instructions, and capture flags
+| Section | Controls |
+|---|---|
+| `experiment` | Project name, output directory, recording format |
+| `cameras` | Device index, resolution, FPS, and role (`overhead` / `face`) for each webcam |
+| `gopros` | Model, WiFi interface, IP, enabled flag |
+| `heart_rate` | Polar H10 on/off, BLE address, ECG on/off |
+| `microphone` | Device name/index, sample rate, channels |
+| `calibration` | Checkerboard size, square size (mm), intrinsic/extrinsic toggles |
+| `phases` | Ordered phase list: `id`, `name`, `instructions`, and capture flags (`record_video`, `record_audio`, `record_gopro`, `allow_pause`, `cameras`) |
 
-## Synchronization
+A printable calibration target is in [docs/checkerboard.pdf](docs/checkerboard.pdf).
 
-Every session produces a `sync_manifest.json` with microsecond-precision Unix timestamps for every recording start/stop, phase transition, and device event. This enables precise post-hoc alignment of all data streams.
+## Project structure
 
-See [SYNCHRONIZATION.md](docs/SYNCHRONIZATION.md) for the complete cross-device sync reference, including alignment recipes and code examples for HR-to-video, face-to-audio, and GoPro sync strategies.
+```
+Iris/
+├── gui.py                  # Desktop GUI (CustomTkinter), the main entry point
+├── main.py                 # CLI entry point
+├── Iris.pyw                # Windows double-click launcher
+├── launch.bat              # Launcher that activates a conda env first
+├── settings.example.json   # Template config; copy to settings.json
+├── src/
+│   ├── experiment.py       # Experiment state machine and phase handlers
+│   ├── phase.py            # Phase model
+│   ├── camera.py           # USB cameras (OpenCV)
+│   ├── video_recorder.py   # Recording, including pausable recording
+│   ├── video_player.py     # Threaded playback engine
+│   ├── audio.py            # Microphone capture
+│   ├── gopro.py            # GoPro WiFi control
+│   ├── heart_rate.py       # Polar H10 over BLE
+│   ├── compositing.py      # ffmpeg compositing and HR overlays
+│   ├── calibrate.py        # Pre-flight device check
+│   ├── lens_correct.py     # Checkerboard intrinsic calibration
+│   ├── len_correction.py   # GoPro barrel-distortion removal
+│   ├── extrinsic_calibration.py  # Multi-camera stereo calibration
+│   └── utils.py
+├── tests/                  # pytest suite (hardware is mocked)
+├── scripts/
+│   └── probe_camera.py     # List webcam resolutions/FPS
+├── assets/                 # Logo and icon
+└── docs/                   # Setup, workflow, and sync guides
+```
 
 ## Documentation
 
-| Document | Contents |
-|----------|----------|
-| [SETUP_GUIDE.md](docs/SETUP_GUIDE.md) | Hardware setup, driver installation, GoPro WiFi routing, troubleshooting |
-| [EXPERIMENT_FLOW.md](docs/EXPERIMENT_FLOW.md) | Detailed experiment lifecycle and phase handler documentation |
-| [SYNCHRONIZATION.md](docs/SYNCHRONIZATION.md) | Cross-device timing, sync_manifest format, alignment code examples |
+| Guide | Covers |
+|---|---|
+| [Setup Guide](docs/SETUP_GUIDE.md) | Hardware setup, drivers, GoPro WiFi routing, troubleshooting |
+| [Experiment Flow](docs/EXPERIMENT_FLOW.md) | Phase lifecycle and handler details |
+| [Synchronization](docs/SYNCHRONIZATION.md) | Manifest format and cross-device alignment recipes |
+| [Experiment Specification](docs/experiment_specification.txt) | The original Taekwondo study protocol Iris was built for |
+
+## Roadmap
+
+- Post-session GoPro import with one-click intrinsic/extrinsic calibration
+- Optional markerless motion-capture (pose estimation) pipeline on the calibrated footage
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, running tests, and PR guidelines.
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+## Citation
+
+If you use Iris in published research, please cite it. Citation metadata is in [CITATION.cff](CITATION.cff), and GitHub shows a "Cite this repository" button for it.
+
+## License
+
+Released under the [MIT License](LICENSE).

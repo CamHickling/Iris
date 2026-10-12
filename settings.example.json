@@ -1,0 +1,127 @@
+{
+  "experiment": {
+    "name": "Taekwondo Experiment",
+    "output_dir": "./output",
+    "recording_format": "mp4"
+  },
+  "cameras": [
+    {
+      "id": "overhead_camera",
+      "name": "Overhead Camera",
+      "device_index": 0,
+      "resolution": [1920, 1080],
+      "fps": 30,
+      "enabled": true,
+      "role": "overhead"
+    },
+    {
+      "id": "face_cam",
+      "name": "Face Cam",
+      "device_index": 1,
+      "resolution": [1920, 1080],
+      "fps": 30,
+      "enabled": true,
+      "role": "face"
+    }
+  ],
+  "gopros": [
+    {
+      "id": "gopro_1",
+      "name": "GoPro Hero 7 Silver #1",
+      "model": "hero7_silver",
+      "wifi_interface": "Wi-Fi 2",
+      "ip_address": "10.5.5.9",
+      "enabled": false
+    },
+    {
+      "id": "gopro_2",
+      "name": "GoPro Hero 5 Session #2",
+      "model": "hero5_session",
+      "wifi_interface": "Wi-Fi 3",
+      "ip_address": "10.5.5.9",
+      "enabled": false
+    }
+  ],
+  "heart_rate": {
+    "enabled": false,
+    "device_address": null,
+    "ecg_enabled": false
+  },
+  "microphone": {
+    "enabled": false,
+    "device_name": "Tonor",
+    "device_index": null,
+    "sample_rate": 44100,
+    "channels": 1
+  },
+  "calibration": {
+    "checkerboard_cols": 10,
+    "checkerboard_rows": 7,
+    "square_size_mm": 25.0,
+    "run_intrinsic": true,
+    "run_extrinsic": true
+  },
+  "phases": [
+    {
+      "id": "setup",
+      "name": "Setup",
+      "duration_seconds": 0,
+      "capture_interval_ms": null,
+      "instructions": "Participant enters the room. Session directories are created."
+    },
+    {
+      "id": "heart_rate_start",
+      "name": "Heart Rate Start",
+      "duration_seconds": 0,
+      "capture_interval_ms": null,
+      "instructions": "Fit the Polar H10 chest strap. Heart rate recording runs for the whole session."
+    },
+    {
+      "id": "warmup_calibration",
+      "name": "Warmup & Calibration",
+      "duration_seconds": 0,
+      "capture_interval_ms": null,
+      "instructions": "Participant warms up while cameras are positioned and calibrated. Finish with a T-pose and a clap for alignment.",
+      "record_video": true,
+      "record_gopro": true
+    },
+    {
+      "id": "performance",
+      "name": "Performance",
+      "duration_seconds": 0,
+      "capture_interval_ms": null,
+      "instructions": "Participant performs. Overhead camera and GoPros are recording.",
+      "record_video": true,
+      "record_gopro": true,
+      "cameras": ["overhead_camera"]
+    },
+    {
+      "id": "review",
+      "name": "Narrating Review",
+      "duration_seconds": 0,
+      "capture_interval_ms": null,
+      "instructions": "Participant watches their performance and narrates. They may pause and resume.",
+      "record_video": true,
+      "record_audio": true,
+      "allow_pause": true,
+      "cameras": ["face_cam"]
+    },
+    {
+      "id": "scoring",
+      "name": "Self-Scoring",
+      "duration_seconds": 0,
+      "capture_interval_ms": null,
+      "instructions": "Participant watches their performance again without pausing and scores it aloud.",
+      "record_video": true,
+      "record_audio": true,
+      "cameras": ["face_cam"]
+    },
+    {
+      "id": "finish",
+      "name": "Finish",
+      "duration_seconds": 0,
+      "capture_interval_ms": null,
+      "instructions": "Stop heart rate recording. Post-processing and backup run automatically."
+    }
+  ]
+}

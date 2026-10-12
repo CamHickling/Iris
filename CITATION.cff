@@ -1,0 +1,8 @@
+cff-version: 1.2.0
+message: "If you use Iris in your research, please cite it as below."
+title: "Iris: multi-camera, multi-sensor experiment capture for movement science"
+authors:
+  - family-names: Hickling
+    given-names: Cam
+license: MIT
+repository-code: "https://github.com/CamHickling/Iris"

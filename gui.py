@@ -37,6 +37,7 @@ except ImportError:
 
 APP_TITLE = "Iris"
 DEFAULT_CONFIG = "settings.json"
+DEFAULT_OUTPUT_DIR = str(Path.home() / "Desktop" / "Iris_Recorded_Taekwondo_Data")
 WINDOW_SIZE = "1400x950"
 MIN_SIZE = (1200, 800)
 
@@ -205,7 +206,7 @@ class IrisApp(ctk.CTk):
             self.settings = {
                 "experiment": {
                     "name": "Taekwondo Experiment",
-                    "output_dir": "C:/Users/BarlabPRIME/desktop/Iris_Recorded_Taekwondo_Data",
+                    "output_dir": DEFAULT_OUTPUT_DIR,
                     "recording_format": "mp4",
                 },
                 "cameras": [],
@@ -1128,7 +1129,7 @@ class IrisApp(ctk.CTk):
     def _populate_ui(self):
         exp = self.settings.get("experiment", {})
         self._set_entry(self._exp_w["name"], exp.get("name", ""))
-        self._set_entry(self._exp_w["output_dir"], exp.get("output_dir", "C:/Users/BarlabPRIME/desktop/Iris_Recorded_Taekwondo_Data"))
+        self._set_entry(self._exp_w["output_dir"], exp.get("output_dir", DEFAULT_OUTPUT_DIR))
         self._exp_w["recording_format"].set(exp.get("recording_format", "mp4"))
 
         # Heart Rate
@@ -2571,7 +2572,7 @@ class IrisApp(ctk.CTk):
         if not text:
             return
         # Try to find the session directory from settings
-        output_dir = self.settings.get("experiment", {}).get("output_dir", "C:/Users/BarlabPRIME/desktop/Iris_Recorded_Taekwondo_Data")
+        output_dir = self.settings.get("experiment", {}).get("output_dir", DEFAULT_OUTPUT_DIR)
         output_path = Path(output_dir)
         if not output_path.is_absolute():
             output_path = Path(os.path.dirname(os.path.abspath(__file__))) / output_path
