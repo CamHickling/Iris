@@ -1,18 +1,16 @@
 <p align="center">
-  <img src="assets/logo.png" alt="Iris logo" width="180">
-</p>
-
-<h1 align="center">Iris</h1>
-
-<p align="center">
-  <strong>Synchronized multi-camera, audio, and heart-rate capture for movement science experiments.</strong>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/readme-banner-dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="assets/brand/readme-banner-light.png">
+    <img alt="Iris: synchronized multi-camera, audio and heart-rate capture for movement science experiments" src="assets/brand/readme-banner-light.png" width="100%">
+  </picture>
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
-  <a href="https://github.com/CamHickling/Iris/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/CamHickling/Iris/actions/workflows/tests.yml/badge.svg"></a>
-  <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-blue.svg">
-  <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows%2011-lightgrey.svg">
+  <a href="https://github.com/CamHickling/Iris/actions/workflows/tests.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/CamHickling/Iris/tests.yml?branch=main&style=flat-square&label=tests&labelColor=0E0E2C"></a>
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-7B6AF9?style=flat-square&labelColor=0E0E2C"></a>
+  <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-7B6AF9?style=flat-square&labelColor=0E0E2C&logo=python&logoColor=white">
+  <img alt="Platform: Windows 11" src="https://img.shields.io/badge/platform-Windows%2011-7B6AF9?style=flat-square&labelColor=0E0E2C">
 </p>
 
 <p align="center">
@@ -82,6 +80,23 @@ Other OpenCV-compatible webcams and audio devices should work. Please [open an i
 ## How it works
 
 A session runs through these phases in order. Each phase `id` in `settings.json` maps to a handler in `src/experiment.py`.
+
+```mermaid
+flowchart LR
+    S([1 · Setup]) --> HR([2 · Heart rate])
+    HR --> W["3 · Warmup &<br>calibration"]
+    W --> P[4 · Performance]
+    P --> R(["5 · Narrating<br>review"])
+    R --> SC([6 · Self-scoring])
+    SC --> F[7 · Finish]
+
+    classDef phase fill:#0E0E2C,stroke:#7B6AF9,color:#FFFFFF
+    classDef gated fill:#7B6AF9,stroke:#0E0E2C,color:#FFFFFF
+    class S,HR,R,SC phase
+    class W,P,F gated
+```
+
+<sub>Filled boxes are checklist-gated: Continue stays disabled until every item is ticked. Heart rate records continuously from phase 2 to 7.</sub>
 
 | # | Phase (`id`) | What happens | Gated by checklist |
 |---|---|---|---|
@@ -167,7 +182,7 @@ Iris/
 ├── tests/                  # pytest suite (hardware is mocked)
 ├── scripts/
 │   └── probe_camera.py     # List webcam resolutions/FPS
-├── assets/                 # Logo and icon
+├── assets/                 # App icon; brand/ holds banners, logos, social preview
 └── docs/                   # Setup, workflow, and sync guides
 ```
 
@@ -201,3 +216,10 @@ If you use Iris in published research, please cite it. Citation metadata is in [
 ## License
 
 Copyright 2026 Cam Hickling. Released under the [Apache License 2.0](LICENSE).
+
+---
+
+<p align="center">
+  <img src="assets/brand/iris-mark-512.png" alt="" width="56"><br>
+  <sub>Iris · built for movement science research</sub>
+</p>
