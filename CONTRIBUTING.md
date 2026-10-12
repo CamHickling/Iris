@@ -44,3 +44,7 @@ The suite mocks hardware libraries (`bleak`, `goprocam`, `sounddevice`, …) in 
 ## Adding a new device
 
 Device modules live in `src/` and follow a common pattern: a `*Config` dataclass built from `settings.json`, a device class with `open`/`start`/`stop` methods, and an optional `*Manager` for multiple instances. Log start/stop events to the sync manifest so the new stream can be aligned in post-processing (see [docs/SYNCHRONIZATION.md](docs/SYNCHRONIZATION.md)).
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE).

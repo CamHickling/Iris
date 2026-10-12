@@ -4,5 +4,5 @@ title: "Iris: multi-camera, multi-sensor experiment capture for movement science
 authors:
   - family-names: Hickling
     given-names: Cam
-license: MIT
+license: Apache-2.0
 repository-code: "https://github.com/CamHickling/Iris"

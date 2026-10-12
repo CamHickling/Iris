@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-blue.svg"></a>
   <a href="https://github.com/CamHickling/Iris/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/CamHickling/Iris/actions/workflows/tests.yml/badge.svg"></a>
   <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-blue.svg">
   <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows%2011-lightgrey.svg">
@@ -200,4 +200,4 @@ If you use Iris in published research, please cite it. Citation metadata is in [
 
 ## License
 
-Released under the [MIT License](LICENSE).
+Copyright 2026 Cam Hickling. Released under the [Apache License 2.0](LICENSE).
