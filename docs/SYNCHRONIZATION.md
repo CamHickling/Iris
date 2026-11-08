@@ -6,7 +6,7 @@ This document describes how every data stream in an Iris session relates to a si
 
 ## 1. The Master Clock
 
-Every sync-critical moment is recorded as a **Unix timestamp** (`time.time()` — seconds since 1970-01-01 UTC, float with microsecond precision). This is the single source of truth for aligning all components.
+Every sync-critical moment is recorded as a **Unix timestamp** (`time.time()` — seconds since 1970-01-01 UTC, float; on Windows it advances about every 0.5 ms, so treat timestamps as millisecond precision). This is the single source of truth for aligning all components.
 
 The file **`sync_manifest.json`**, saved at the root of every session directory, contains a chronological list of these timestamped events.
 
@@ -341,9 +341,9 @@ class SessionTimeline:
 
 | Component | Clock Source | Precision | Notes |
 |-----------|-------------|-----------|-------|
-| Sync manifest events | `time.time()` | ~1 μs | Python wall-clock |
-| HR samples | `time.time()` | ~1 μs | Per-notification timestamp |
-| ECG samples | `time.time()` | ~1 μs | Per-batch timestamp (130 Hz batches) |
+| Sync manifest events | `time.time()` | ~1 ms (advances every ~0.5 ms on Windows) | Python wall-clock |
+| HR samples | `time.time()` | ~1 ms | Per-notification timestamp |
+| ECG samples | `time.time()` | ~1 ms | Per-batch timestamp (130 Hz batches) |
 | Video frame timing | `time.perf_counter()` | ~100 ns | Used for FPS regulation within recorder |
 | Audio samples | Hardware callback | ~23 μs at 44.1 kHz | Determined by audio buffer size |
 | GoPro video | GoPro internal clock | ~1 s | Must sync via clap or metadata |

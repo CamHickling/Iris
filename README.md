@@ -14,6 +14,7 @@
 </p>
 
 <p align="center">
+  <a href="#why-it-exists">Why it exists</a> •
   <a href="#quick-start">Quick start</a> •
   <a href="#how-it-works">How it works</a> •
   <a href="#configuration">Configuration</a> •
@@ -27,12 +28,28 @@ Iris is a full-screen desktop app that runs structured, multi-phase lab sessions
 
 It was built for Taekwondo performance research, where a participant performs, watches themselves back while narrating, and then scores their own performance. The phase system is configurable, so you can adapt it to other movement-science protocols.
 
+## Why it exists
+
+**The problem.** The UBC Brain, Attention and Reality Lab's Taekwondo flow study needed overhead and face cameras, GoPros, heart rate and spoken narration recorded in one session, then lined up precisely for analysis. The team had no way to capture multimodal data like this and keep it in sync. Without a tool, the study couldn't run.
+
+**Who used it.** A team of 10 researchers recorded 50 participants and more than 60 trials with Iris. The study is now in advanced analysis, ahead of writing and publication.
+
+| Decision | Why |
+|---|---|
+| Checklists lock each phase until every item is ticked | Steps can't be skipped mid-session, when a participant can't redo a trial |
+| One shared timeline for every device (`sync_manifest.json`, millisecond timestamps) | Alignment happens once, in software, not by hand for each trial |
+| Sessions copied to a backup drive when they finish | A lost session is a lost participant |
+| Runs with only a webcam; GoPros, heart rate and the microphone can each be turned off | New labs can try it before buying all the hardware |
+| Phases configured in the app | Other movement-science protocols can use it without code changes |
+
+**Impact.** No lost sessions across 50 participants. Together with [FlowAnalytics](https://github.com/CamHickling/FlowAnalytics), Iris cut out more than 90 hours of manual alignment. Its calibrated multi-camera footage made motion analysis possible, and its face recordings made facial analysis possible.
+
 ## Features
 
 - **One GUI for every device.** Overhead and face webcams, up to two GoPros over WiFi, a Polar H10 (HR, RR intervals, optional 130 Hz ECG), and a USB microphone.
 - **Guided phase workflow.** The experimenter moves through phases, and checklists must be ticked before they can advance, so steps don't get skipped.
 - **Built-in playback for participants.** Plays the overhead recording back while the face camera and mic record the participant's reaction. Pause/resume can be turned on per phase.
-- **Synchronization manifest.** Every session writes a `sync_manifest.json` with microsecond Unix timestamps for each recording start/stop, phase change, and device event.
+- **Synchronization manifest.** Every session writes a `sync_manifest.json` with millisecond Unix timestamps for each recording start/stop, phase change, and device event.
 - **Automatic post-processing.** Uses ffmpeg to build a review video with the participant's commentary and face videos with a heart-rate overlay.
 - **Calibration tools.** Intrinsic and extrinsic (stereo) checkerboard calibration, plus barrel-distortion correction for GoPro footage.
 - **Live device status.** Pass/fail indicators for every connected device, and a pre-flight check (`--calibrate`).
