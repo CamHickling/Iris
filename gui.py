@@ -3,8 +3,10 @@
 
 Run directly:    python gui.py
 From launcher:   double-click Iris.pyw
+Demo mode:       python gui.py --demo   (simulated devices, writes to demo_output/)
 """
 
+import argparse
 import ctypes
 import json
 import os
@@ -108,7 +110,7 @@ class OutputRedirector:
 
 
 class IrisApp(ctk.CTk):
-    def __init__(self):
+    def __init__(self, demo=False, demo_port=None):
         super().__init__()
 
         self.title(APP_TITLE)
@@ -183,9 +185,18 @@ class IrisApp(ctk.CTk):
         self._rec_start_time = 0.0
         self._rec_timer_id = None
 
+        # Demo mode: simulated devices and isolated settings/output (src/demo.py)
+        self._demo = demo
+        self._demo_port = demo_port
+        if demo:
+            from src import demo as demo_mode
+            self.config_path = demo_mode.prepare()
+
         self._load_settings()
         self._build_ui()
         self._populate_ui()
+        if demo:
+            demo_mode.install(self)
         self._poll_console()
         self._poll_gui_events()
 
@@ -1974,10 +1985,13 @@ class IrisApp(ctk.CTk):
                 cal_results = list(tool._results)
                 self.after(0, lambda: self._apply_calibration_results(cal_results))
 
-                # GoPros always run in manual mode
+                # GoPros always run in manual mode (simulated ones in demo mode
+                # run in auto mode so they show as connected)
                 has_gopros = any(g.get("enabled", True)
                                 for g in self.settings.get("gopros", []))
-                if has_gopros:
+                if self._demo:
+                    self.after(0, lambda: self._set_gopro_mode("auto"))
+                elif has_gopros:
                     self.after(0, lambda: self._set_gopro_mode("manual"))
                     self.after(0, lambda: self._update_gopro_status("manual"))
 
@@ -2002,9 +2016,12 @@ class IrisApp(ctk.CTk):
     def _set_gopro_mode(self, mode):
         """Update the GoPro mode and refresh the indicator on the settings bar."""
         self._gopro_mode = mode
-        self._mode_indicator.configure(
-            text="  GoPro: MANUAL  ", text_color=CLR_ORANGE,
-        )
+        if mode == "auto":
+            self._mode_indicator.configure(text="  GoPro: AUTO  ", text_color=CLR_GREEN)
+        else:
+            self._mode_indicator.configure(
+                text="  GoPro: MANUAL  ", text_color=CLR_ORANGE,
+            )
 
     def _on_calibration_done(self):
         """Enable Run Experiment after calibration has been run."""
@@ -2675,5 +2692,12 @@ class IrisApp(ctk.CTk):
 # --- Entry Point --------------------------------------------------------------
 
 if __name__ == "__main__":
-    app = IrisApp()
+    parser = argparse.ArgumentParser(description="Iris desktop GUI")
+    parser.add_argument("--demo", action="store_true",
+                        help="simulate every device and write to demo_output/ "
+                             "(never touches settings.json or real hardware)")
+    parser.add_argument("--demo-port", type=int, default=47900,
+                        help="localhost port for the demo control server (default 47900)")
+    args = parser.parse_args()
+    app = IrisApp(demo=args.demo, demo_port=args.demo_port)
     app.mainloop()

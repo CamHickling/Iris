@@ -7,6 +7,12 @@
 </p>
 
 <p align="center">
+  <a href="video/iris-15s.mp4">
+    <img src="video/iris-15s.gif" width="100%" alt="15-second demo of Iris with simulated devices: a phase checklist unlocks the next step, six devices turn green, the Performance phase starts recording, and the session folder's sync_manifest.json logs every device on one clock. 50 participants, 60+ trials, 1+ TB captured, zero lost sessions.">
+  </a>
+</p>
+
+<p align="center">
   <a href="https://github.com/CamHickling/Iris/actions/workflows/tests.yml"><img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/CamHickling/Iris/tests.yml?branch=main&style=flat-square&label=tests&labelColor=0E0E2C"></a>
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-7B6AF9?style=flat-square&labelColor=0E0E2C"></a>
   <img alt="Python 3.9+" src="https://img.shields.io/badge/python-3.9%2B-7B6AF9?style=flat-square&labelColor=0E0E2C&logo=python&logoColor=white">

@@ -219,3 +219,8 @@ output/
 
 # Quarto render output
 *_files/
+
+# Demo mode output (python gui.py --demo) and demo video build files
+demo_output/
+video/build/
+video/out/
