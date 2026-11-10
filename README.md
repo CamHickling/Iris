@@ -6,6 +6,8 @@
   </picture>
 </p>
 
+<p align="center"><b>Run multi-sensor experiments from one screen, and walk away with data that lines up.</b></p>
+
 <p align="center">
   <a href="video/iris-15s.mp4">
     <img src="video/iris-15s.gif" width="100%" alt="15-second demo of Iris with simulated devices: a phase checklist unlocks the next step, six devices turn green, the Performance phase starts recording, and the session folder's sync_manifest.json logs every device on one clock. 50 participants, 60+ trials, 1+ TB captured, zero lost sessions.">
@@ -23,16 +25,25 @@
   <a href="#why-it-exists">Why it exists</a> •
   <a href="#quick-start">Quick start</a> •
   <a href="#how-it-works">How it works</a> •
+  <a href="#status">Status</a> •
   <a href="#configuration">Configuration</a> •
   <a href="#documentation">Docs</a> •
-  <a href="#contributing">Contributing</a>
+  <a href="#credits">Credits</a>
 </p>
 
 ---
 
-Iris is a full-screen desktop app that runs structured, multi-phase lab sessions. It records USB webcams, GoPros, a Polar H10 heart-rate monitor, and a microphone from one place, and logs a shared timeline so you can line the data up afterwards.
+**Who it's for.** Movement-science labs that record cameras, audio and heart rate in the same session. Iris guides the experimenter through each step so nothing gets missed, and logs every device on one shared clock so the data lines up afterwards. It was built for the UBC Brain, Attention and Reality Lab's Taekwondo flow study.
 
-It was built for Taekwondo performance research, where a participant performs, watches themselves back while narrating, and then scores their own performance. The phase system is configurable, so you can adapt it to other movement-science protocols.
+**What you get**
+
+- **No skipped steps.** Each phase unlocks only when its checklist is done.
+- **Data that lines up.** One `sync_manifest.json` per session logs every device on one clock, with millisecond timestamps.
+- **One screen for six devices.** Webcams, GoPros, a Polar H10 and a microphone, each with a live status light.
+- **Nothing lost.** Heavy processing waits until capture is over, and each session is copied to a backup drive when it ends.
+- **Try it without hardware.** `python gui.py --demo` simulates every device.
+
+**Track record:** 50 participants · 60+ trials · 1+ TB captured · zero lost sessions.
 
 ## Why it exists
 
@@ -72,6 +83,8 @@ pip install -r requirements.txt
 copy settings.example.json settings.json
 python gui.py
 ```
+
+**Check that it worked:** run `python gui.py --demo`. Iris opens with simulated devices (nothing is written outside `demo_output/`). Click **Calibrate Devices** and all six device rows should turn green.
 
 You can also double-click `Iris.pyw` to launch without a console window, or use `launch.bat` to activate a conda environment first.
 
@@ -218,10 +231,19 @@ Iris/
 | [Synchronization](docs/SYNCHRONIZATION.md) | Manifest format and cross-device alignment recipes |
 | [Experiment Specification](docs/experiment_specification.txt) | The original Taekwondo study protocol Iris was built for |
 
-## Roadmap
+## Status
 
-- Post-session GoPro import with one-click intrinsic/extrinsic calibration
-- Optional markerless motion-capture (pose estimation) pipeline on the calibrated footage
+| Part | Status |
+|---|---|
+| Guided 7-phase workflow with checklist-gated phases | ✅ Working, used for every session of the study |
+| Capture: webcams, GoPros over WiFi, Polar H10 (HR, RR, ECG), microphone | ✅ Working |
+| `sync_manifest.json` shared timeline (millisecond timestamps) | ✅ Working |
+| Post-session compositing and heart-rate overlays | ✅ Working |
+| Automatic backup, pre-flight device check, checkerboard calibration tools | ✅ Working |
+| Demo mode with simulated devices (`--demo`) | ✅ Working |
+| Review player at 1920x1080: the video can push Pause/Continue off screen (the spacebar still works) | 🟡 Known issue |
+| Post-session GoPro import with one-click intrinsic/extrinsic calibration | ⏳ Planned |
+| Markerless motion capture (pose estimation) on the calibrated footage | ⏳ Planned |
 
 ## Contributing
 
@@ -231,6 +253,14 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup,
 pip install -r requirements-dev.txt
 python -m pytest
 ```
+
+## Credits
+
+Built by [Cam Hickling](https://github.com/CamHickling) in collaboration with Alan Kingstone, Angela Mejia, Baruch Eitam and the research assistants of the UBC Brain, Attention and Reality (BAR) Lab. [FlowAnalytics](https://github.com/CamHickling/FlowAnalytics) processes the recordings Iris makes.
+
+## Ethics and data
+
+No participant data, faces, voices or names are in this repository, its screenshots or the demo GIF. The demo was recorded with `--demo`, which simulates every device. Iris writes sessions outside the repository, and `settings.json`, `output/` and `demo_output/` are git-ignored. Getting consent and storing data as your ethics approval requires is the researcher's responsibility.
 
 ## Citation
 
