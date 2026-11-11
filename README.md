@@ -59,7 +59,7 @@
 | Runs with only a webcam; GoPros, heart rate and the microphone can each be turned off | New labs can try it before buying all the hardware |
 | Phases configured in the app | Other movement-science protocols can use it without code changes |
 
-**Impact.** No lost sessions across 50 participants. Together with [FlowAnalytics](https://github.com/CamHickling/FlowAnalytics), Iris cut out more than 90 hours of manual alignment. Its calibrated multi-camera footage made motion analysis possible, and its face recordings made facial analysis possible.
+**Impact.** No lost sessions across 50 participants. Together with [FlowAnalytics](https://github.com/CamHickling/FlowAnalytics), Iris cut out more than 120 hours of manual alignment. Its calibrated multi-camera footage made motion analysis possible, and its face recordings made facial analysis possible.
 
 ## Features
 
